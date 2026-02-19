@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Frontend build artifacts (will be built in Docker stage 1)
+frontend/node_modules/
+static/dist/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Env secrets
+.env
+.env.local
+
+# Docs (not needed in image)
+docs/
