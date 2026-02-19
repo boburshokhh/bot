@@ -13,6 +13,7 @@
 5. [Nginx + HTTPS для webhook](#5-nginx--https-для-webhook)
 6. [Создание и настройка Webhook](#6-создание-и-настройка-webhook)
 7. [Проверка и отладка](#7-проверка-и-отладка)
+8. [Сервер только в локальной сети (без белого IP)](#8-сервер-только-в-локальной-сети-без-белого-ip)
 
 ---
 
@@ -446,6 +447,178 @@ sudo tail -f /var/log/nginx/error.log
 | 502 Bad Gateway | Приложение слушает 8000, `proxy_pass` на `127.0.0.1:8000`, контейнер запущен. |
 | Webhook не срабатывает | HTTPS, URL точно `https://..../webhook`, `setWebhook` выполнен, `getWebhookInfo` показывает этот URL. |
 | SSL ошибки | Сертификат для нужного домена, срок действия, перезагрузка Nginx после certbot. |
+
+---
+
+## 8. Сервер только в локальной сети (без белого IP)
+
+Если сервер доступен только из локальной сети (например 192.168.x.x), Telegram не сможет доставить webhook. Есть два варианта.
+
+### Вариант A: Long polling (рекомендуется — ничего не пробрасывать)
+
+Бот сам опрашивает Telegram за обновления. Домен, HTTPS и webhook **не нужны**.
+
+1. **Удалите webhook**, если он был установлен:
+   ```bash
+   curl -X POST "https://api.telegram.org/bot<ТОКЕН>/deleteWebhook"
+   ```
+
+2. **Запустите контейнеры в режиме polling** (вместо FastAPI/webhook):
+   ```bash
+   cd /opt/bot
+   docker compose down
+   docker compose -f docker-compose.yml -f docker-compose.polling.yml up -d --build
+   ```
+
+3. В `.env` достаточно `TELEGRAM_BOT_TOKEN`, `DATABASE_URL`, `REDIS_URL`. `WEBHOOK_BASE_URL` можно не указывать.
+
+4. Проверка: напишите боту в Telegram; в логах должно быть `Long polling started`:
+   ```bash
+   docker compose logs -f app
+   ```
+
+Celery (утренние/вечерние уведомления) продолжает работать как раньше. Порт 8001 на хосте не используется.
+
+### Вариант B: Туннель (ngrok) — оставить webhook
+
+Туннель даёт вашему серверу временный публичный HTTPS-адрес. Telegram шлёт обновления на этот адрес, ngrok перенаправляет их на `localhost:8001`. Да, это решает проблему «сервер только в локальной сети».
+
+#### Шаг 1. Бот должен работать в режиме webhook (порт 8001)
+
+Не используйте `docker-compose.polling.yml`. Запустите обычный стек:
+
+```bash
+cd /opt/bot
+docker compose down
+docker compose up -d --build
+```
+
+Проверьте, что приложение отвечает локально:
+
+```bash
+curl -s http://localhost:8001/health
+# Должно вернуть: {"status":"ok"}
+```
+
+#### Шаг 2. Регистрация в ngrok и токен
+
+1. Зайдите на [ngrok.com](https://ngrok.com) и зарегистрируйтесь (бесплатно).
+2. В личном кабинете: **Your Authtoken** — скопируйте токен.
+3. На сервере добавьте токен (подставьте свой):
+
+```bash
+ngrok config add-authtoken ВАШ_ТОКЕН_ИЗ_КАБИНЕТА
+```
+
+Если `ngrok` ещё не установлен, сначала выполните шаг 3.
+
+#### Шаг 3. Установка ngrok на Ubuntu
+
+```bash
+# Зависимости
+sudo apt update
+sudo apt install -y curl apt-transport-https
+
+# Репозиторий ngrok (официальный)
+curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+sudo apt update
+sudo apt install -y ngrok
+
+# Токен (если ещё не делали)
+ngrok config add-authtoken ВАШ_ТОКЕН
+```
+
+#### Шаг 4. Запуск туннеля на порт 8001
+
+**Вручную (для проверки):**
+
+```bash
+ngrok http 8001
+```
+
+В терминале появится строка вида:
+
+```
+Forwarding   https://abc123.ngrok-free.app -> http://localhost:8001
+```
+
+Скопируйте `https://abc123.ngrok-free.app` — это ваш публичный URL. Не закрывайте этот терминал (пока туннель работает, бот будет получать webhook).
+
+**В фоне (чтобы туннель работал постоянно):**
+
+Используйте `systemd` (см. шаг 6 ниже) или хотя бы `screen`/`tmux`:
+
+```bash
+sudo apt install -y screen
+screen -S ngrok
+ngrok http 8001
+# Отсоединиться: Ctrl+A, затем D. Вернуться: screen -r ngrok
+```
+
+#### Шаг 5. Установка webhook в Telegram
+
+Подставьте свой токен бота и URL из вывода ngrok (без слэша в конце, путь `/webhook` добавится):
+
+```bash
+curl -X POST "https://api.telegram.org/botВАШ_ТОКЕН_БОТА/setWebhook?url=https://abc123.ngrok-free.app/webhook"
+```
+
+Успешный ответ: `{"ok":true,"result":true,...}`. Проверка:
+
+```bash
+curl -s "https://api.telegram.org/botВАШ_ТОКЕН_БОТА/getWebhookInfo"
+```
+
+В ответе должен быть `"url":"https://....ngrok-free.app/webhook"`. Напишите боту в Telegram — ответы должны приходить.
+
+#### Шаг 6. Туннель как служба (по желанию)
+
+Чтобы ngrok поднимался после перезагрузки и не зависел от сессии SSH, создайте systemd-сервис:
+
+```bash
+sudo nano /etc/systemd/system/ngrok.service
+```
+
+Содержимое (путь к ngrok и порт при необходимости поправьте):
+
+```ini
+[Unit]
+Description=ngrok tunnel for Telegram bot webhook
+After=network.target docker.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/ngrok http 8001
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Включите и запустите:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable ngrok
+sudo systemctl start ngrok
+sudo systemctl status ngrok
+```
+
+**Важно:** после каждого перезапуска ngrok бесплатный URL может измениться. Тогда снова выполните `getWebhookInfo`, возьмите новый URL и вызовите `setWebhook` с ним. Постоянный домен даёт платный план ngrok или Cloudflare Tunnel.
+
+#### Кратко: что делает туннель
+
+| Кто              | Действие |
+|------------------|----------|
+| Telegram         | Шлёт POST на `https://xxxx.ngrok-free.app/webhook` |
+| ngrok (в интернете) | Принимает запрос и пересылает на ваш сервер |
+| Ваш сервер       | Получает запрос на `localhost:8001/webhook`, бот обрабатывает |
+
+Домен и белый IP серверу не нужны — всё решает туннель.
+
+**Cloudflare Tunnel:** даёт постоянный поддомен (например `bot.ваш-домен.com`) и не требует платного ngrok; настройка дольше — см. [Cloudflare Zero Trust](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/).
 
 ---
 

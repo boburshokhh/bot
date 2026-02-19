@@ -1,0 +1,9 @@
+# Режим long polling: для сервера без доступа из интернета (только локальная сеть).
+# Webhook и домен не нужны. Запуск:
+#   docker compose -f docker-compose.yml -f docker-compose.polling.yml up -d --build
+# Не вызывайте setWebhook — бот сам забирает обновления у Telegram.
+
+services:
+  app:
+    command: ["sh", "-c", "alembic upgrade head && python -m src.run_polling"]
+    ports: []   # HTTP не нужен, порт 8001 не пробрасываем
