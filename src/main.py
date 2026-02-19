@@ -47,6 +47,16 @@ async def health():
     return {"status": "ok"}
 
 
+async def _process_update(body: dict) -> None:
+    """Process update in background (log errors, do not fail webhook response)."""
+    try:
+        from aiogram.types import Update
+        update = Update.model_validate(body)
+        await dp.feed_webhook_update(bot, update)
+    except Exception as e:
+        logger.exception("Webhook processing error: %s", e)
+
+
 async def _handle_webhook(request: Request) -> JSONResponse | dict:
     logger.info("Webhook request received")
     settings = Settings()
@@ -56,12 +66,12 @@ async def _handle_webhook(request: Request) -> JSONResponse | dict:
             return JSONResponse(status_code=403, content={"ok": False})
     try:
         body = await request.json()
-        from aiogram.types import Update
-        update = Update.model_validate(body)
-        await dp.feed_webhook_update(bot, update)
     except Exception as e:
-        logger.exception("Webhook error: %s", e)
-        return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
+        logger.exception("Webhook body error: %s", e)
+        return JSONResponse(status_code=400, content={"ok": False, "error": str(e)})
+    # Return 200 immediately so Telegram does not retry; process in background
+    import asyncio
+    asyncio.create_task(_process_update(body))
     return {"ok": True}
 
 

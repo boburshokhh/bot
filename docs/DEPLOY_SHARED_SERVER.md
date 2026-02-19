@@ -7,7 +7,7 @@
 ## Что понадобится
 
 - Доступ по SSH к Ubuntu-серверу
-- Домен (например `bot.yourdomain.com`) с **A-записью** на IP сервера
+- Домен с **A-записью** на IP сервера (в гайде — **me-bobur.uz**, webhook на корне домена)
 - Токен бота Telegram от [@BotFather](https://t.me/BotFather)
 
 ---
@@ -111,7 +111,7 @@ nano .env
 ```env
 TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
 WEBHOOK_SECRET=ваша_случайная_строка_секрета
-WEBHOOK_BASE_URL=https://bot.yourdomain.com
+WEBHOOK_BASE_URL=https://me-bobur.uz
 
 DATABASE_URL=postgresql+asyncpg://user:password@postgres:5432/planning_bot
 REDIS_URL=redis://redis:6379/0
@@ -191,9 +191,11 @@ curl -s http://127.0.0.1:APP_PORT/health
 
 ---
 
-## Шаг 6 — Nginx + HTTPS (общие 80/443)
+## Шаг 6 — Nginx + HTTPS для домена me-bobur.uz
 
-Остальные сайты продолжают работать через тот же Nginx на 80/443. Добавляем **новый server block** для бота.
+Остальные сайты на этом сервере продолжают работать через тот же Nginx на 80/443. Добавляем конфиг для **me-bobur.uz** (или дополняем существующий server block для этого домена).
+
+**DNS:** у домена me-bobur.uz должна быть A-запись на IP вашего сервера (обычно имя **@** или **me-bobur.uz**). Тогда запросы на https://me-bobur.uz приходят на ваш сервер.
 
 Установите Nginx и Certbot, если ещё не стоят:
 
@@ -202,18 +204,18 @@ sudo apt update
 sudo apt install -y nginx certbot python3-certbot-nginx
 ```
 
-Создайте конфиг (подставьте свой домен и `APP_PORT`):
+Создайте конфиг для бота:
 
 ```bash
 sudo nano /etc/nginx/sites-available/planning-bot
 ```
 
-Содержимое (укажите реальный порт приложения, например 8002):
+Содержимое (порт **8001** — как у приложения на вашем сервере):
 
 ```nginx
 server {
     listen 80;
-    server_name bot.yourdomain.com;
+    server_name me-bobur.uz;
     location / {
         return 301 https://$server_name$request_uri;
     }
@@ -221,13 +223,13 @@ server {
 
 server {
     listen 443 ssl http2;
-    server_name bot.yourdomain.com;
+    server_name me-bobur.uz;
 
-    ssl_certificate     /etc/letsencrypt/live/bot.yourdomain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/bot.yourdomain.com/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/me-bobur.uz/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/me-bobur.uz/privkey.pem;
 
     location /webhook {
-        proxy_pass http://127.0.0.1:APP_PORT;
+        proxy_pass http://127.0.0.1:8001;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -239,24 +241,23 @@ server {
     }
 
     location /health {
-        proxy_pass http://127.0.0.1:APP_PORT;
+        proxy_pass http://127.0.0.1:8001;
         proxy_set_header Host $host;
     }
 }
 ```
 
-Замените **APP_PORT** на порт приложения на хосте (например 8002).
+Если приложение у вас на другом порту — замените **8001** на него.
 
-Получение SSL-сертификата:
+Включите сайт и получите SSL:
 
 ```bash
 sudo ln -sf /etc/nginx/sites-available/planning-bot /etc/nginx/sites-enabled/
-# При первом запуске можно временно оставить только server { listen 80; server_name bot.yourdomain.com; ... }, затем:
 sudo nginx -t && sudo systemctl reload nginx
-sudo certbot --nginx -d bot.yourdomain.com
+sudo certbot --nginx -d me-bobur.uz
 ```
 
-Если Certbot сам добавил блок с SSL — снова отредактируйте файл: добавьте `location /webhook` и `location /health` с `proxy_pass http://127.0.0.1:APP_PORT;`. Затем:
+Если Certbot сам добавил блок с SSL — отредактируйте файл снова: в блоках `location /webhook` и `location /health` укажите `proxy_pass http://127.0.0.1:8001;`. Затем:
 
 ```bash
 sudo nginx -t && sudo systemctl reload nginx
@@ -266,10 +267,10 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ## Шаг 7 — Настроить webhook в Telegram
 
-Подставьте токен бота и домен:
+Подставьте свой токен бота (вместо `<TELEGRAM_BOT_TOKEN>`):
 
 ```bash
-curl -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=https://bot.yourdomain.com/webhook"
+curl -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=https://me-bobur.uz/webhook"
 ```
 
 С секретным токеном (рекомендуется):
@@ -281,13 +282,13 @@ echo $SECRET
 
 curl -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
   -H "Content-Type: application/json" \
-  -d "{\"url\": \"https://bot.yourdomain.com/webhook\", \"secret_token\": \"$SECRET\"}"
+  -d "{\"url\": \"https://me-bobur.uz/webhook\", \"secret_token\": \"$SECRET\"}"
 ```
 
 Проверка:
 
 ```bash
-curl -s https://bot.yourdomain.com/health
+curl -s https://me-bobur.uz/health
 curl -s "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
 ```
 
@@ -301,7 +302,8 @@ curl -s "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
 - [ ] Клонировали репозиторий, создали `.env` с токеном, URL webhook, URL БД/Redis
 - [ ] При необходимости обновили порты в `docker-compose.yml` или `docker-compose.remote.yml`
 - [ ] Запустили стек, выполнили `alembic upgrade head`, проверили `/health` по порту приложения
-- [ ] Добавили server block в Nginx для `bot.yourdomain.com`, `proxy_pass` на нужный порт приложения
+- [ ] Домен me-bobur.uz указывает на IP сервера (A-запись)
+- [ ] Добавили server block в Nginx для `me-bobur.uz`, `proxy_pass` на порт приложения (8001)
 - [ ] Получили SSL через Certbot, перезагрузили Nginx
 - [ ] Установили webhook через `setWebhook`, проверили через `getWebhookInfo` и сообщением боту
 

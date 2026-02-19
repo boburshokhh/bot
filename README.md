@@ -84,7 +84,8 @@
 
 Рекомендуется держать за Nginx/HTTPS и проксировать `POST /webhook` на контейнер `app:8000`.
 
-**Подробный гайд:** пошаговый деплой на Ubuntu (в том числе второй/параллельный сервер) и настройка webhook — [docs/DEPLOYMENT_UBUNTU_WEBHOOK.md](docs/DEPLOYMENT_UBUNTU_WEBHOOK.md).
+**Подробный гайд:** пошаговый деплой на Ubuntu (в том числе второй/параллельный сервер) и настройка webhook — [docs/DEPLOYMENT_UBUNTU_WEBHOOK.md](docs/DEPLOYMENT_UBUNTU_WEBHOOK.md).  
+**Настройка домена под сервер:** DNS, Nginx, HTTPS, webhook — [docs/DOMAIN_SETUP.md](docs/DOMAIN_SETUP.md).
 
 ## Разработка
 
