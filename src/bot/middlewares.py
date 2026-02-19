@@ -6,7 +6,7 @@ from typing import Any, Awaitable, Callable
 from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject
 
-from src.db import async_session_factory
+from src.db import session as db_session
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +35,9 @@ class DbSessionMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: dict[str, Any],
     ) -> Any:
-        if not async_session_factory:
+        if not db_session.async_session_factory:
             return await handler(event, data)
-        async with async_session_factory() as session:
+        async with db_session.async_session_factory() as session:
             data["session"] = session
             try:
                 result = await handler(event, data)
