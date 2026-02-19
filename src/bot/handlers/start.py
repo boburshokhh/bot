@@ -1,11 +1,13 @@
 """Start and timezone selection."""
-from datetime import time
+from datetime import datetime, time, timezone
+from zoneinfo import ZoneInfo
 import re
 
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
+import json
 
 from src.bot.keyboards import tz_keyboard, webapp_keyboard
 from src.bot.text import COMMANDS_OVERVIEW, TIMEZONE_CHOOSE_PROMPT, WELCOME, TZ_SET, format_settings
@@ -59,7 +61,27 @@ def _build_webapp_url() -> str | None:
 @router.message(Command("start"))
 async def cmd_start(message: Message, session: AsyncSession):
     await get_or_create_user(session, message.from_user.id)
-    await message.answer(WELCOME, reply_markup=tz_keyboard())
+    await message.answer(WELCOME, reply_markup=tz_keyboard(include_detect=True))
+
+
+@router.message(Command("time"))
+async def cmd_time(message: Message, session: AsyncSession):
+    """Show bot server time (UTC) and user's local time for debugging."""
+    utc_now = datetime.now(timezone.utc)
+    lines = [
+        f"🕐 Время сервера бота (UTC): {utc_now.strftime('%Y-%m-%d %H:%M:%S')}",
+        f"Unix (сек): {int(utc_now.timestamp())}",
+    ]
+    user = await get_user_by_telegram_id(session, message.from_user.id)
+    if user:
+        try:
+            tz = ZoneInfo(user.timezone)
+            local_now = utc_now.astimezone(tz)
+            lines.append(f"Твоё время ({user.timezone}): {local_now.strftime('%Y-%m-%d %H:%M:%S')}")
+            lines.append(f"Уведомления: утро {user.notify_morning_time.strftime('%H:%M')}, вечер {user.notify_evening_time.strftime('%H:%M')}")
+        except Exception:
+            lines.append("(часовой пояс не определён)")
+    await message.answer("\n".join(lines))
 
 
 @router.message(Command("help"))
@@ -94,7 +116,7 @@ async def cmd_timezone(message: Message, session: AsyncSession):
     if not user:
         await message.answer("Сначала отправь /start и выбери часовой пояс.")
         return
-    await message.answer(TIMEZONE_CHOOSE_PROMPT, reply_markup=tz_keyboard())
+    await message.answer(TIMEZONE_CHOOSE_PROMPT, reply_markup=tz_keyboard(include_detect=True))
 
 
 @router.message(Command("set_morning"))
@@ -188,3 +210,37 @@ async def set_timezone(message: Message, session: AsyncSession):
     webapp_url = _build_webapp_url()
     if webapp_url:
         await message.answer("Открыть панель управления:", reply_markup=webapp_keyboard(webapp_url))
+
+
+@router.message(F.web_app_data)
+async def handle_webapp_data(message: Message, session: AsyncSession):
+    """Handle data sent from WebApp (e.g., timezone detection)."""
+    try:
+        data = json.loads(message.web_app_data.data)
+        if "timezone" in data:
+            tz = data["timezone"].strip()
+            # Validate timezone (can be any valid IANA timezone, not just from ALLOWED_TZ)
+            try:
+                ZoneInfo(tz)
+            except Exception:
+                await message.answer(f"❌ Неверный часовой пояс: {tz}")
+                return
+            
+            user = await get_user_by_telegram_id(session, message.from_user.id)
+            if not user:
+                user = await get_or_create_user(session, message.from_user.id, timezone=tz)
+            else:
+                await update_user_timezone(session, user.id, tz)
+            await message.answer(
+                f"✅ Часовой пояс сохранён: {tz}\n\n{COMMANDS_OVERVIEW}",
+                reply_markup=None
+            )
+            webapp_url = _build_webapp_url()
+            if webapp_url:
+                await message.answer("Открыть панель управления:", reply_markup=webapp_keyboard(webapp_url))
+        else:
+            await message.answer("❌ Неизвестные данные из WebApp")
+    except json.JSONDecodeError:
+        await message.answer("❌ Ошибка обработки данных из WebApp")
+    except Exception as e:
+        await message.answer(f"❌ Ошибка: {str(e)}")

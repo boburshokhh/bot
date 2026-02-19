@@ -1,37 +1,35 @@
 (function () {
-  const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+  const tg = window.Telegram?.WebApp;
   if (tg) {
     tg.ready();
     tg.expand();
-  }
-
-  const statusBar = document.getElementById("statusBar");
-  const todayBlock = document.getElementById("todayBlock");
-  const statsBlock = document.getElementById("statsBlock");
-  const historyBlock = document.getElementById("historyBlock");
-
-  function setStatus(message, isError) {
-    statusBar.textContent = message;
-    statusBar.className = `status ${isError ? "err" : "ok"}`;
+    // Настройка темы Telegram
+    if (tg.colorScheme === 'dark') {
+      document.documentElement.style.setProperty('--bg', '#1f2937');
+      document.documentElement.style.setProperty('--card-bg', '#374151');
+      document.documentElement.style.setProperty('--text', '#f9fafb');
+      document.documentElement.style.setProperty('--text-muted', '#d1d5db');
+      document.documentElement.style.setProperty('--border', '#4b5563');
+    }
   }
 
   function getInitData() {
-    if (tg && tg.initData) {
+    if (tg?.initData) {
       return tg.initData;
     }
     const p = new URLSearchParams(window.location.search);
     return p.get("initData") || "";
   }
 
-  async function api(path, options) {
+  async function api(path, options = {}) {
     const initData = getInitData();
     const resp = await fetch(path, {
-      method: options && options.method ? options.method : "GET",
+      method: options.method || "GET",
       headers: {
         "Content-Type": "application/json",
         "X-Telegram-Init-Data": initData,
       },
-      body: options && options.body ? JSON.stringify(options.body) : undefined,
+      body: options.body ? JSON.stringify(options.body) : undefined,
     });
     if (!resp.ok) {
       let msg = `HTTP ${resp.status}`;
@@ -44,160 +42,208 @@
     return resp.json();
   }
 
-  function taskStatusLabel(value) {
-    if (value === "done") return "✅ выполнено";
-    if (value === "partial") return "⚠ частично";
-    if (value === "failed") return "❌ не выполнено";
-    return "— не отмечено";
-  }
+  function webapp() {
+    return {
+      loading: {
+        today: true,
+        stats: true,
+        history: false,
+        settings: true,
+      },
+      today: {
+        tasks: [],
+        date: null,
+        exists: false,
+      },
+      stats: {
+        total_plans: 0,
+        avg_percent: 0,
+        current_streak: 0,
+      },
+      history: {
+        items: [],
+        month: new Date().toISOString().slice(0, 7),
+      },
+      settings: {
+        timezone: "",
+        morning_time: "",
+        evening_time: "",
+        reminder_interval_minutes: 60,
+        reminder_max_attempts: 1,
+      },
+      newPlanText: "",
+      historyMonth: new Date().toISOString().slice(0, 7),
+      status: {
+        show: false,
+        message: "",
+        type: "success",
+      },
 
-  function renderToday(data) {
-    if (!data.tasks || data.tasks.length === 0) {
-      todayBlock.innerHTML = `<div>На сегодня плана нет.</div>`;
-      return;
-    }
-    const rows = data.tasks.map((task) => {
-      const comment = task.comment ? `<div class="muted">Комментарий: ${task.comment}</div>` : "";
-      return `
-        <div class="task">
-          <div><strong>${task.position + 1}. ${task.text}</strong></div>
-          <div class="muted">Статус: ${taskStatusLabel(task.status)}</div>
-          ${comment}
-          <div class="row">
-            <button data-task="${task.id}" data-status="done">✅</button>
-            <button data-task="${task.id}" data-status="partial">⚠</button>
-            <button data-task="${task.id}" data-status="failed">❌</button>
-          </div>
-          <div class="row">
-            <input id="comment-${task.id}" placeholder="Комментарий (опционально)" />
-            <button class="secondary" data-comment-task="${task.id}">Сохранить комментарий</button>
-          </div>
-        </div>
-      `;
-    });
-    todayBlock.innerHTML = rows.join("");
+      async init() {
+        await Promise.all([
+          this.loadToday(),
+          this.loadSettings(),
+          this.loadStats(),
+          this.loadHistory(),
+        ]);
+        this.showStatus("WebApp готов", "success");
+      },
 
-    document.querySelectorAll("[data-status]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
+      showStatus(message, type = "success") {
+        this.status.message = message;
+        this.status.type = type;
+        this.status.show = true;
+        setTimeout(() => {
+          this.status.show = false;
+        }, 3000);
+      },
+
+      getStatusLabel(status) {
+        const labels = {
+          done: "✅ выполнено",
+          partial: "⚠ частично",
+          failed: "❌ не выполнено",
+        };
+        return labels[status] || "— не отмечено";
+      },
+
+      formatDate(dateStr) {
+        const date = new Date(dateStr);
+        return date.toLocaleDateString("ru-RU", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
+      },
+
+      async loadToday() {
+        this.loading.today = true;
         try {
-          await api(`/api/tasks/${btn.dataset.task}/status`, {
-            method: "PUT",
-            body: { status: btn.dataset.status },
+          const data = await api("/api/today");
+          this.today = data;
+        } catch (err) {
+          this.showStatus("Ошибка загрузки плана: " + err.message, "error");
+        } finally {
+          this.loading.today = false;
+        }
+      },
+
+      async loadSettings() {
+        this.loading.settings = true;
+        try {
+          const s = await api("/api/settings");
+          this.settings = {
+            timezone: s.timezone || "",
+            morning_time: s.morning_time || "",
+            evening_time: s.evening_time || "",
+            reminder_interval_minutes: s.reminder_interval_minutes || 60,
+            reminder_max_attempts: s.reminder_max_attempts || 1,
+          };
+        } catch (err) {
+          this.showStatus("Ошибка загрузки настроек: " + err.message, "error");
+        } finally {
+          this.loading.settings = false;
+        }
+      },
+
+      async loadStats() {
+        this.loading.stats = true;
+        try {
+          const s = await api("/api/stats");
+          this.stats = s;
+        } catch (err) {
+          this.showStatus("Ошибка загрузки статистики: " + err.message, "error");
+        } finally {
+          this.loading.stats = false;
+        }
+      },
+
+      async loadHistory() {
+        this.loading.history = true;
+        try {
+          const month = this.historyMonth || new Date().toISOString().slice(0, 7);
+          const h = await api(`/api/history?month=${encodeURIComponent(month)}`);
+          this.history = h;
+        } catch (err) {
+          this.showStatus("Ошибка загрузки истории: " + err.message, "error");
+        } finally {
+          this.loading.history = false;
+        }
+      },
+
+      async savePlan() {
+        const raw = this.newPlanText || "";
+        const tasks = raw
+          .split("\n")
+          .map((x) => x.trim())
+          .filter(Boolean);
+        if (tasks.length === 0) {
+          this.showStatus("Добавьте хотя бы одну задачу", "error");
+          return;
+        }
+        try {
+          await api("/api/plan/today", {
+            method: "POST",
+            body: { tasks },
           });
-          setStatus("Статус обновлён", false);
-          await loadToday();
-          await loadStats();
+          this.showStatus("План сохранён", "success");
+          this.newPlanText = "";
+          await Promise.all([this.loadToday(), this.loadStats()]);
         } catch (err) {
-          setStatus(err.message, true);
+          this.showStatus("Ошибка: " + err.message, "error");
         }
-      });
-    });
+      },
 
-    document.querySelectorAll("[data-comment-task]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const id = btn.dataset.commentTask;
-        const comment = document.getElementById(`comment-${id}`).value || "";
+      async saveSettings() {
         try {
-          await api(`/api/tasks/${id}/status`, { method: "PUT", body: { comment } });
-          setStatus("Комментарий обновлён", false);
-          await loadToday();
+          await api("/api/settings", {
+            method: "PUT",
+            body: {
+              timezone: this.settings.timezone?.trim() || null,
+              morning_time: this.settings.morning_time?.trim() || null,
+              evening_time: this.settings.evening_time?.trim() || null,
+              reminder_interval_minutes:
+                this.settings.reminder_interval_minutes || null,
+              reminder_max_attempts: this.settings.reminder_max_attempts || null,
+            },
+          });
+          this.showStatus("Настройки сохранены", "success");
+          await this.loadSettings();
         } catch (err) {
-          setStatus(err.message, true);
+          this.showStatus("Ошибка: " + err.message, "error");
         }
-      });
-    });
-  }
+      },
 
-  function renderStats(data) {
-    statsBlock.innerHTML = `
-      <div>Всего планов: <strong>${data.total_plans}</strong></div>
-      <div>Средний % выполнения: <strong>${data.avg_percent}%</strong></div>
-      <div>Текущий стрик: <strong>${data.current_streak}</strong></div>
-    `;
-  }
+      async updateTaskStatus(taskId, status) {
+        try {
+          await api(`/api/tasks/${taskId}/status`, {
+            method: "PUT",
+            body: { status },
+          });
+          this.showStatus("Статус обновлён", "success");
+          await Promise.all([this.loadToday(), this.loadStats()]);
+        } catch (err) {
+          this.showStatus("Ошибка: " + err.message, "error");
+        }
+      },
 
-  function renderHistory(data) {
-    if (!data.items || data.items.length === 0) {
-      historyBlock.innerHTML = "<div>За выбранный месяц данных нет.</div>";
-      return;
-    }
-    historyBlock.innerHTML = data.items
-      .map((x) => `<div>${x.date}: ${x.done}/${x.total} (${x.percent}%)</div>`)
-      .join("");
-  }
-
-  async function loadToday() {
-    const data = await api("/api/today");
-    renderToday(data);
-  }
-
-  async function loadSettings() {
-    const s = await api("/api/settings");
-    document.getElementById("tzInput").value = s.timezone;
-    document.getElementById("morningInput").value = s.morning_time;
-    document.getElementById("eveningInput").value = s.evening_time;
-    document.getElementById("intervalInput").value = String(s.reminder_interval_minutes);
-    document.getElementById("attemptsInput").value = String(s.reminder_max_attempts);
-  }
-
-  async function loadStats() {
-    const s = await api("/api/stats");
-    renderStats(s);
-  }
-
-  async function loadHistory(month) {
-    const m = month || new Date().toISOString().slice(0, 7);
-    document.getElementById("historyMonthInput").value = m;
-    const h = await api(`/api/history?month=${encodeURIComponent(m)}`);
-    renderHistory(h);
-  }
-
-  document.getElementById("savePlanBtn").addEventListener("click", async () => {
-    const raw = document.getElementById("planTasks").value || "";
-    const tasks = raw.split("\n").map((x) => x.trim()).filter(Boolean);
-    try {
-      await api("/api/plan/today", { method: "POST", body: { tasks } });
-      setStatus("План сохранён", false);
-      document.getElementById("planTasks").value = "";
-      await loadToday();
-      await loadStats();
-    } catch (err) {
-      setStatus(err.message, true);
-    }
-  });
-
-  document.getElementById("saveSettingsBtn").addEventListener("click", async () => {
-    const payload = {
-      timezone: document.getElementById("tzInput").value.trim(),
-      morning_time: document.getElementById("morningInput").value.trim(),
-      evening_time: document.getElementById("eveningInput").value.trim(),
-      reminder_interval_minutes: Number(document.getElementById("intervalInput").value),
-      reminder_max_attempts: Number(document.getElementById("attemptsInput").value),
+      async saveComment(taskId) {
+        const input = document.getElementById(`comment-${taskId}`);
+        const comment = input?.value?.trim() || "";
+        try {
+          await api(`/api/tasks/${taskId}/status`, {
+            method: "PUT",
+            body: { comment },
+          });
+          this.showStatus("Комментарий сохранён", "success");
+          await this.loadToday();
+        } catch (err) {
+          this.showStatus("Ошибка: " + err.message, "error");
+        }
+      },
     };
-    try {
-      await api("/api/settings", { method: "PUT", body: payload });
-      setStatus("Настройки сохранены", false);
-      await loadSettings();
-    } catch (err) {
-      setStatus(err.message, true);
-    }
-  });
+  }
 
-  document.getElementById("loadHistoryBtn").addEventListener("click", async () => {
-    try {
-      await loadHistory(document.getElementById("historyMonthInput").value.trim());
-      setStatus("История обновлена", false);
-    } catch (err) {
-      setStatus(err.message, true);
-    }
-  });
-
-  (async function init() {
-    try {
-      await Promise.all([loadToday(), loadSettings(), loadStats(), loadHistory()]);
-      setStatus("WebApp готов", false);
-    } catch (err) {
-      setStatus(err.message, true);
-    }
-  })();
+  // Экспортируем функцию для Alpine.js
+  window.webapp = webapp;
 })();

@@ -143,6 +143,27 @@ server {
         proxy_pass http://127.0.0.1:8001;
         proxy_set_header Host $host;
     }
+
+    location /webapp {
+        proxy_pass http://127.0.0.1:8001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    location /static/ {
+        proxy_pass http://127.0.0.1:8001;
+        proxy_set_header Host $host;
+    }
+    location /api/ {
+        proxy_pass http://127.0.0.1:8001;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Telegram-Init-Data $http_x_telegram_init_data;
+    }
 }
 ```
 
@@ -153,6 +174,8 @@ server {
 ```bash
 sudo nginx -t && sudo systemctl reload nginx
 ```
+
+Если при этом появляется предупреждение «conflicting server name» или открывается 404 для `/webapp` — значит домен бота описан в двух конфигах и активен только один. Как оставить один конфиг и добавить в него `/webapp`, `/static`, `/api`, см. [DEPLOY_SHARED_SERVER.md](DEPLOY_SHARED_SERVER.md), раздел «404 для WebApp и конфликт server_name».
 
 ### 2.5. Проверить с сервера
 

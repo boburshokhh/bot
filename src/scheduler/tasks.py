@@ -159,7 +159,7 @@ async def _send_evening(user_id: int, plan_date: date, attempt_count: int) -> No
         factory2, engine2 = _get_async_session()
         async with factory2() as session:
             await log_notification(
-                session, user_id, TYPE_EVENING, STATUS_SENT, {"plan_id": plan_id, "attempt": attempt_count}
+                session, user_id, TYPE_EVENING, STATUS_SENT, {"plan_id": plan_id, "date": plan_date.isoformat(), "attempt": attempt_count}
             )
             await session.commit()
         await engine2.dispose()
@@ -168,7 +168,7 @@ async def _send_evening(user_id: int, plan_date: date, attempt_count: int) -> No
         factory2, engine2 = _get_async_session()
         async with factory2() as session:
             await log_notification(
-                session, user_id, TYPE_EVENING, STATUS_RETRIED if attempt_count > 0 else STATUS_FAILED, {"error": str(e)}
+                session, user_id, TYPE_EVENING, STATUS_RETRIED if attempt_count > 0 else STATUS_FAILED, {"error": str(e), "date": plan_date.isoformat()}
             )
             await session.commit()
         await engine2.dispose()
@@ -300,13 +300,12 @@ def send_evening_reminder(user_id: int, plan_date: str):
 @app.task
 def dispatch_daily_notifications():
     """
-    Run every 15 min: find users for whom it's 07:00 or 21:00 in their TZ,
+    Run every 15 min: find users for whom it's morning/evening time in their TZ,
     enqueue send_morning_prompt or send_evening_prompt.
+    Uses user timezone for 'today' and for duplicate check.
     """
     async def _run():
-        settings = Settings()
         factory, engine = _get_async_session()
-        today = date.today()
         async with factory() as session:
             r = await session.execute(select(User))
             users = list(r.scalars().all())
@@ -315,28 +314,32 @@ def dispatch_daily_notifications():
                     tz = ZoneInfo(user.timezone)
                 except Exception:
                     tz = ZoneInfo("UTC")
-                now = datetime.now(tz).time()
+                now = datetime.now(tz)
+                user_today = now.date()
+                now_time = now.time()
                 mt, et = user.notify_morning_time, user.notify_evening_time
-                if mt and (mt.hour == now.hour and mt.minute <= now.minute < mt.minute + 15):
+                if mt and (mt.hour == now_time.hour and mt.minute <= now_time.minute < mt.minute + 15):
                     r2 = await session.execute(
                         select(NotificationLog).where(
                             NotificationLog.user_id == user.id,
                             NotificationLog.type == TYPE_MORNING,
-                            func.date(NotificationLog.created_at) == today,
+                            NotificationLog.payload["date"].astext == user_today.isoformat(),
                         ).limit(1)
                     )
-                    if r2.scalar_one_or_none() is None:
-                        send_morning_prompt.delay(user.id, today.isoformat(), 0)
-                if et and (et.hour == now.hour and et.minute <= now.minute < et.minute + 15):
+                    sent_today = r2.scalar_one_or_none() is not None
+                    if not sent_today:
+                        send_morning_prompt.delay(user.id, user_today.isoformat(), 0)
+                if et and (et.hour == now_time.hour and et.minute <= now_time.minute < et.minute + 15):
                     r2 = await session.execute(
                         select(NotificationLog).where(
                             NotificationLog.user_id == user.id,
                             NotificationLog.type == TYPE_EVENING,
-                            func.date(NotificationLog.created_at) == today,
+                            NotificationLog.payload["date"].astext == user_today.isoformat(),
                         ).limit(1)
                     )
-                    if r2.scalar_one_or_none() is None:
-                        send_evening_prompt.delay(user.id, today.isoformat(), 0)
+                    sent_today = r2.scalar_one_or_none() is not None
+                    if not sent_today:
+                        send_evening_prompt.delay(user.id, user_today.isoformat(), 0)
         await engine.dispose()
 
     asyncio.run(_run())

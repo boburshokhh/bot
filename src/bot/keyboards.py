@@ -17,12 +17,31 @@ TZ_CHOICES = [
 ]
 
 
-def tz_keyboard() -> ReplyKeyboardMarkup:
+def tz_keyboard(include_detect: bool = False) -> ReplyKeyboardMarkup:
+    """Create timezone selection keyboard with optional auto-detect button."""
+    rows = [
+        [KeyboardButton(text=t) for t in row]
+        for row in TZ_CHOICES
+    ]
+    if include_detect:
+        # Add WebApp button for timezone detection
+        from aiogram.types import WebAppInfo
+        try:
+            from src.config import Settings
+            webapp_url = Settings().webhook_base_url.strip()
+            if webapp_url:
+                detect_url = f"{webapp_url.rstrip('/')}/timezone-detector"
+                rows.append([
+                    KeyboardButton(
+                        text="🌍 Определить мой часовой пояс",
+                        web_app=WebAppInfo(url=detect_url)
+                    )
+                ])
+        except Exception:
+            # Если не настроен webhook_base_url, просто не добавляем кнопку
+            pass
     kb = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text=t) for t in row]
-            for row in TZ_CHOICES
-        ],
+        keyboard=rows,
         resize_keyboard=True,
         one_time_keyboard=True,
     )

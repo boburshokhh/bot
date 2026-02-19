@@ -5,63 +5,489 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Planning Bot WebApp</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script src="/static/webapp.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; margin: 12px; background: #f4f6f8; color: #1f2937; }
-    .card { background: #fff; border-radius: 12px; padding: 12px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
-    h2 { margin: 0 0 8px 0; font-size: 16px; }
-    h3 { margin: 0 0 6px 0; font-size: 14px; }
-    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
-    button { border: 0; border-radius: 8px; padding: 8px 10px; background: #2563eb; color: #fff; cursor: pointer; }
-    button.secondary { background: #6b7280; }
-    input, select, textarea { border: 1px solid #d1d5db; border-radius: 8px; padding: 8px; width: 100%; box-sizing: border-box; }
-    textarea { min-height: 80px; resize: vertical; }
-    .task { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; margin-top: 8px; background: #fafafa; }
-    .muted { color: #6b7280; font-size: 12px; }
-    .status { margin-top: 8px; font-size: 13px; }
-    .ok { color: #059669; }
-    .err { color: #dc2626; }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary: #667eea;
+      --primary-dark: #5568d3;
+      --secondary: #764ba2;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #1f2937;
+      --text-muted: #6b7280;
+      --border: #e5e7eb;
+      --shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.1);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 16px;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: var(--shadow);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .card:hover {
+      box-shadow: var(--shadow-lg);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .card-header-icon {
+      font-size: 24px;
+    }
+
+    .btn {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      padding: 12px 24px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+      width: 100%;
+      margin-top: 12px;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+
+    .btn-secondary {
+      background: var(--text-muted);
+    }
+
+    .btn-success {
+      background: var(--success);
+    }
+
+    .btn-danger {
+      background: var(--danger);
+    }
+
+    .btn-small {
+      padding: 8px 16px;
+      font-size: 13px;
+      width: auto;
+      margin: 0 4px;
+    }
+
+    .input-group {
+      margin-bottom: 16px;
+    }
+
+    .input-group label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      font-size: 15px;
+      transition: border-color 0.2s;
+      font-family: inherit;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+    }
+
+    textarea {
+      min-height: 100px;
+      resize: vertical;
+    }
+
+    .task-card {
+      background: #f9fafb;
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      margin-top: 12px;
+      transition: all 0.2s;
+    }
+
+    .task-card:hover {
+      border-color: var(--primary);
+      background: #f3f4f6;
+    }
+
+    .task-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .task-number {
+      font-weight: 600;
+      color: var(--primary);
+      margin-right: 8px;
+    }
+
+    .task-text {
+      flex: 1;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    .task-status {
+      font-size: 13px;
+      padding: 4px 10px;
+      border-radius: 8px;
+      background: var(--border);
+      color: var(--text-muted);
+    }
+
+    .task-status.done {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .task-status.partial {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .task-status.failed {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .task-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+
+    .task-comment {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      font-size: 13px;
+      color: var(--text-muted);
+      font-style: italic;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .stat-item {
+      text-align: center;
+      padding: 16px;
+      background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+      border-radius: 12px;
+    }
+
+    .stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 4px;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .status-bar {
+      position: fixed;
+      bottom: 16px;
+      left: 16px;
+      right: 16px;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 500;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: all 0.3s;
+      pointer-events: none;
+      z-index: 1000;
+    }
+
+    .status-bar.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .status-bar.success {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .status-bar.error {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 20px;
+      color: var(--text-muted);
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-muted);
+    }
+
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+
+    .row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .history-item {
+      padding: 12px;
+      background: #f9fafb;
+      border-radius: 10px;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .history-date {
+      font-weight: 500;
+    }
+
+    .history-stats {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background: var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary) 0%, var(--secondary) 100%);
+      transition: width 0.3s;
+    }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h2>Сегодня</h2>
-    <div id="todayBlock">Загрузка...</div>
-  </div>
-
-  <div class="card">
-    <h2>Создать/обновить план на сегодня</h2>
-    <textarea id="planTasks" placeholder="Каждая задача с новой строки"></textarea>
-    <div class="row">
-      <button id="savePlanBtn">Сохранить план</button>
+  <div class="container" x-data="webapp()" x-init="init()">
+    <!-- Today's Plan -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-header-icon">📋</span>
+        <span>Сегодня</span>
+      </div>
+      <div id="todayBlock">
+        <div class="loading" x-show="loading.today">Загрузка...</div>
+        <div class="empty-state" x-show="!loading.today && (!today.tasks || today.tasks.length === 0)">
+          <div class="empty-state-icon">📝</div>
+          <div>На сегодня плана нет</div>
+        </div>
+        <template x-for="task in today.tasks" :key="task.id">
+          <div class="task-card">
+            <div class="task-header">
+              <div class="task-text">
+                <span class="task-number" x-text="task.position + 1 + '.'"></span>
+                <span x-text="task.text"></span>
+              </div>
+            </div>
+            <div class="task-status" 
+                 :class="{
+                   'done': task.status === 'done',
+                   'partial': task.status === 'partial',
+                   'failed': task.status === 'failed'
+                 }"
+                 x-text="getStatusLabel(task.status)"></div>
+            <div class="task-actions">
+              <button class="btn btn-success btn-small" @click="updateTaskStatus(task.id, 'done')">✅</button>
+              <button class="btn btn-secondary btn-small" @click="updateTaskStatus(task.id, 'partial')">⚠️</button>
+              <button class="btn btn-danger btn-small" @click="updateTaskStatus(task.id, 'failed')">❌</button>
+            </div>
+            <div class="row" style="margin-top: 12px;">
+              <input type="text" 
+                     :id="'comment-' + task.id" 
+                     :placeholder="'Комментарий к задаче ' + (task.position + 1)"
+                     style="flex: 1;" />
+              <button class="btn btn-secondary btn-small" @click="saveComment(task.id)">💬 Сохранить</button>
+            </div>
+            <div class="task-comment" x-show="task.comment" x-text="'💬 ' + task.comment"></div>
+          </div>
+        </template>
+      </div>
     </div>
-  </div>
 
-  <div class="card">
-    <h2>Настройки</h2>
-    <div class="row"><label>Часовой пояс</label><input id="tzInput" placeholder="Europe/Moscow" /></div>
-    <div class="row"><label>Утро (HH:MM)</label><input id="morningInput" placeholder="07:00" /></div>
-    <div class="row"><label>Вечер (HH:MM)</label><input id="eveningInput" placeholder="21:00" /></div>
-    <div class="row"><label>Интервал повторов (мин)</label><input id="intervalInput" type="number" min="5" max="720" /></div>
-    <div class="row"><label>Макс. повторов</label><input id="attemptsInput" type="number" min="0" max="10" /></div>
-    <div class="row"><button id="saveSettingsBtn">Сохранить настройки</button></div>
-  </div>
-
-  <div class="card">
-    <h2>Статистика</h2>
-    <div id="statsBlock">Загрузка...</div>
-  </div>
-
-  <div class="card">
-    <h2>История</h2>
-    <div class="row">
-      <input id="historyMonthInput" placeholder="YYYY-MM" />
-      <button class="secondary" id="loadHistoryBtn">Загрузить</button>
+    <!-- Create Plan -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-header-icon">✏️</span>
+        <span>Создать план на сегодня</span>
+      </div>
+      <textarea 
+        id="planTasks" 
+        placeholder="Каждая задача с новой строки&#10;Например:&#10;1. Прочитать отчёт&#10;2. Встреча в 11:00&#10;3. Тренировка"
+        x-model="newPlanText"></textarea>
+      <button class="btn" @click="savePlan()">💾 Сохранить план</button>
     </div>
-    <div id="historyBlock"></div>
+
+    <!-- Settings -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-header-icon">⚙️</span>
+        <span>Настройки</span>
+      </div>
+      <div class="input-group">
+        <label>Часовой пояс</label>
+        <input type="text" id="tzInput" x-model="settings.timezone" placeholder="Europe/Moscow" />
+      </div>
+      <div class="row">
+        <div class="input-group" style="flex: 1;">
+          <label>Утро (HH:MM)</label>
+          <input type="text" id="morningInput" x-model="settings.morning_time" placeholder="07:00" />
+        </div>
+        <div class="input-group" style="flex: 1;">
+          <label>Вечер (HH:MM)</label>
+          <input type="text" id="eveningInput" x-model="settings.evening_time" placeholder="21:00" />
+        </div>
+      </div>
+      <div class="row">
+        <div class="input-group" style="flex: 1;">
+          <label>Интервал повторов (мин)</label>
+          <input type="number" id="intervalInput" x-model="settings.reminder_interval_minutes" min="5" max="720" />
+        </div>
+        <div class="input-group" style="flex: 1;">
+          <label>Макс. повторов</label>
+          <input type="number" id="attemptsInput" x-model="settings.reminder_max_attempts" min="0" max="10" />
+        </div>
+      </div>
+      <button class="btn" @click="saveSettings()">💾 Сохранить настройки</button>
+    </div>
+
+    <!-- Statistics -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-header-icon">📊</span>
+        <span>Статистика</span>
+      </div>
+      <div id="statsBlock">
+        <div class="loading" x-show="loading.stats">Загрузка...</div>
+        <div class="stats-grid" x-show="!loading.stats">
+          <div class="stat-item">
+            <div class="stat-value" x-text="stats.total_plans || 0"></div>
+            <div class="stat-label">Всего планов</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" x-text="(stats.avg_percent || 0) + '%'"></div>
+            <div class="stat-label">Средний %</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" x-text="stats.current_streak || 0"></div>
+            <div class="stat-label">Текущий стрик</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- History -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-header-icon">📅</span>
+        <span>История</span>
+      </div>
+      <div class="row">
+        <input type="month" id="historyMonthInput" x-model="historyMonth" style="flex: 1;" />
+        <button class="btn btn-secondary btn-small" @click="loadHistory()">Загрузить</button>
+      </div>
+      <div id="historyBlock" style="margin-top: 16px;">
+        <div class="loading" x-show="loading.history">Загрузка...</div>
+        <div class="empty-state" x-show="!loading.history && (!history.items || history.items.length === 0)">
+          <div class="empty-state-icon">📭</div>
+          <div>За выбранный месяц данных нет</div>
+        </div>
+        <template x-for="item in history.items" :key="item.date">
+          <div class="history-item">
+            <div>
+              <div class="history-date" x-text="formatDate(item.date)"></div>
+              <div class="history-stats" x-text="item.done + '/' + item.total + ' (' + item.percent + '%)'"></div>
+              <div class="progress-bar">
+                <div class="progress-fill" :style="'width: ' + item.percent + '%'"></div>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="status-bar" 
+         :class="{ 'show': status.show, 'success': status.type === 'success', 'error': status.type === 'error' }"
+         x-text="status.message"></div>
   </div>
-
-  <div id="statusBar" class="status muted"></div>
-
-  <script src="/static/webapp.js"></script>
 </body>
 </html>

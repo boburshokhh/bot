@@ -244,6 +244,27 @@ server {
         proxy_pass http://127.0.0.1:8001;
         proxy_set_header Host $host;
     }
+
+    location /webapp {
+        proxy_pass http://127.0.0.1:8001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    location /static/ {
+        proxy_pass http://127.0.0.1:8001;
+        proxy_set_header Host $host;
+    }
+    location /api/ {
+        proxy_pass http://127.0.0.1:8001;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Telegram-Init-Data $http_x_telegram_init_data;
+    }
 }
 ```
 
@@ -316,5 +337,38 @@ curl -s "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
 | Порт уже занят | `ss -tlnp`; сменить порт на хосте в compose и в Nginx `proxy_pass`. |
 | 502 Bad Gateway | Контейнер приложения запущен; порт в `proxy_pass` совпадает с портом приложения; `curl http://127.0.0.1:APP_PORT/health` отвечает. |
 | Webhook не приходят | В `getWebhookInfo` указан HTTPS URL; Nginx проксирует `/webhook` на приложение; фаервол разрешает 80/443. |
+| 404 для /webapp или «conflicting server name» | См. ниже раздел «404 для WebApp и конфликт server_name». |
 
 Подробнее (фаервол, логи, Celery) — в [DEPLOYMENT_UBUNTU_WEBHOOK.md](DEPLOYMENT_UBUNTU_WEBHOOK.md).
+
+### 404 для WebApp и конфликт server_name
+
+При сообщении Nginx «conflicting server name "bot.ваш-домен"» один из двух конфигов с этим `server_name` **игнорируется**. Если в активном конфиге нет `location /webapp`, `location /static/`, `location /api/`, то запросы к ним отдают 404.
+
+**Шаги на сервере:**
+
+1. **Определить, какой конфиг обслуживает бота:**
+   ```bash
+   sudo grep -l "bot.me-bobur.uz" /etc/nginx/sites-enabled/*
+   ```
+   Будут два файла (например `planning-bot` и `tamex.conf`). Nginx использует только один из них для этого домена.
+
+2. **Выбрать один конфиг:**
+   - **Вариант A:** Оставить только `planning-bot` (в нём уже есть `/webhook`, `/health`, `/webapp`, `/static/`, `/api/`). Отключить дубликат:
+     ```bash
+     sudo rm /etc/nginx/sites-enabled/tamex.conf
+     ```
+     Если в tamex.conf есть и другие сайты — не удаляйте файл, а уберите из него блоки с `server_name bot.me-bobur.uz` или переименуйте симлинк: `sudo mv /etc/nginx/sites-enabled/tamex.conf /etc/nginx/sites-enabled/tamex.conf.bak`
+   - **Вариант B:** Оставить только `tamex.conf` для бота. Тогда отключите planning-bot: `sudo rm /etc/nginx/sites-enabled/planning-bot`. В **tamex.conf** внутри server-блока с `server_name bot.me-bobur.uz` добавьте те же `location` для `/webapp`, `/static/`, `/api/`, что в [DOMAIN_SETUP.md](DOMAIN_SETUP.md) (секция 2.4), с `proxy_pass` на порт приложения (8001) и для `/api/` — `proxy_set_header X-Telegram-Init-Data $http_x_telegram_init_data;`.
+
+3. **Проверить порт приложения** во всех `proxy_pass` и что приложение отвечает:
+   ```bash
+   curl -s http://127.0.0.1:8001/health
+   curl -s http://127.0.0.1:8001/webapp
+   ```
+
+4. **Перезагрузить Nginx:**
+   ```bash
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+   После этого `https://bot.ваш-домен/webapp` должна открываться без 404.

@@ -44,6 +44,10 @@ class CreateTodayPlanPayload(BaseModel):
     tasks: list[str]
 
 
+class TimezoneDetectPayload(BaseModel):
+    timezone: str
+
+
 def _parse_hhmm(value: str) -> time:
     if not re.fullmatch(r"\d{2}:\d{2}", value):
         raise HTTPException(status_code=400, detail="Time format must be HH:MM")
@@ -171,6 +175,21 @@ async def api_stats(
     session: AsyncSession = Depends(get_async_session),
 ):
     return await get_stats(session, user.id)
+
+
+@router.post("/timezone/detect")
+async def api_timezone_detect(
+    payload: TimezoneDetectPayload,
+    user: User = Depends(get_webapp_user),
+    session: AsyncSession = Depends(get_async_session),
+):
+    """Save timezone detected from browser."""
+    try:
+        ZoneInfo(payload.timezone)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid timezone") from exc
+    await update_user_timezone(session, user.id, payload.timezone)
+    return {"ok": True, "timezone": payload.timezone}
 
 
 @router.get("/history")

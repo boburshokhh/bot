@@ -5,7 +5,7 @@ from pathlib import Path
 
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.redis import RedisStorage
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -56,6 +56,11 @@ async def health():
 @app.get("/webapp")
 async def webapp():
     return FileResponse(PROJECT_ROOT / "templates" / "webapp.html")
+
+
+@app.get("/timezone-detector")
+async def timezone_detector():
+    return FileResponse(PROJECT_ROOT / "templates" / "timezone-detector.html")
 
 
 async def _process_update(body: dict) -> None:

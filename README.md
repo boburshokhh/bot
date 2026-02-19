@@ -94,7 +94,7 @@
    curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://YOUR_DOMAIN/webhook"
    ```
 
-Рекомендуется держать за Nginx/HTTPS и проксировать `POST /webhook` на контейнер `app:8000`.
+Рекомендуется держать за Nginx/HTTPS и проксировать `POST /webhook` на контейнер `app:8000`. Для работы WebApp нужно проксировать также `/webapp`, `/static` и `/api` — см. детали в гайдах по развёртыванию.
 
 **Подробный гайд:** пошаговый деплой на Ubuntu (в том числе второй/параллельный сервер) и настройка webhook — [docs/DEPLOYMENT_UBUNTU_WEBHOOK.md](docs/DEPLOYMENT_UBUNTU_WEBHOOK.md).  
 **Настройка домена под сервер:** DNS, Nginx, HTTPS, webhook — [docs/DOMAIN_SETUP.md](docs/DOMAIN_SETUP.md).
