@@ -23,7 +23,7 @@ class RequestIdMiddleware(BaseMiddleware):
         request_id = str(uuid.uuid4())[:8]
         data["request_id"] = request_id
         logger.info("request_id=%s", request_id, extra={"request_id": request_id})
-        return await handler(event, **data)
+        return await handler(event, data)
 
 
 class DbSessionMiddleware(BaseMiddleware):
@@ -36,11 +36,11 @@ class DbSessionMiddleware(BaseMiddleware):
         data: dict[str, Any],
     ) -> Any:
         if not async_session_factory:
-            return await handler(event, **data)
+            return await handler(event, data)
         async with async_session_factory() as session:
             data["session"] = session
             try:
-                result = await handler(event, **data)
+                result = await handler(event, data)
                 await session.commit()
                 return result
             except Exception:
