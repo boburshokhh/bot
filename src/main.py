@@ -51,8 +51,9 @@ async def health():
 async def webhook(request: Request, response: Response):
     settings = Settings()
     if settings.webhook_secret:
-        # Optional: check header or query for secret
-        pass
+        secret_header = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
+        if secret_header != settings.webhook_secret:
+            return JSONResponse(status_code=403, content={"ok": False})
     try:
         body = await request.json()
         from aiogram.types import Update

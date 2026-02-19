@@ -84,6 +84,8 @@
 
 Рекомендуется держать за Nginx/HTTPS и проксировать `POST /webhook` на контейнер `app:8000`.
 
+**Подробный гайд:** пошаговый деплой на Ubuntu (в том числе второй/параллельный сервер) и настройка webhook — [docs/DEPLOYMENT_UBUNTU_WEBHOOK.md](docs/DEPLOYMENT_UBUNTU_WEBHOOK.md).
+
 ## Разработка
 
 - Установка зависимостей: `pip install -e ".[dev]"`
