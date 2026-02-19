@@ -297,12 +297,23 @@ def send_evening_reminder(user_id: int, plan_date: str):
     asyncio.run(_run())
 
 
+# Minutes within which we consider "now" to match the user's notify time (beat runs every minute).
+DISPATCH_WINDOW_MINUTES = 2
+
+
+def _in_dispatch_window(now_minutes_since_midnight: int, target_time) -> bool:
+    """True if now is within DISPATCH_WINDOW_MINUTES after target_time (in same day)."""
+    target_m = target_time.hour * 60 + target_time.minute
+    delta = (now_minutes_since_midnight - target_m) % 1440
+    return 0 <= delta < DISPATCH_WINDOW_MINUTES
+
+
 @app.task
 def dispatch_daily_notifications():
     """
-    Run every 15 min: find users for whom it's morning/evening time in their TZ,
+    Run every minute: find users for whom it's morning/evening time in their TZ,
     enqueue send_morning_prompt or send_evening_prompt.
-    Uses user timezone for 'today' and for duplicate check.
+    Uses user timezone for 'today' and for duplicate check. No UTC fallback to avoid wrong delivery time.
     """
     async def _run():
         factory, engine = _get_async_session()
@@ -312,13 +323,19 @@ def dispatch_daily_notifications():
             for user in users:
                 try:
                     tz = ZoneInfo(user.timezone)
-                except Exception:
-                    tz = ZoneInfo("UTC")
+                except Exception as e:
+                    logger.warning(
+                        "Skipping notifications for user_id=%s: timezone '%s' invalid or tzdata missing: %s",
+                        user.id,
+                        user.timezone,
+                        e,
+                    )
+                    continue
                 now = datetime.now(tz)
                 user_today = now.date()
-                now_time = now.time()
+                now_m = now.hour * 60 + now.minute
                 mt, et = user.notify_morning_time, user.notify_evening_time
-                if mt and (mt.hour == now_time.hour and mt.minute <= now_time.minute < mt.minute + 15):
+                if mt and _in_dispatch_window(now_m, mt):
                     r2 = await session.execute(
                         select(NotificationLog).where(
                             NotificationLog.user_id == user.id,
@@ -329,7 +346,7 @@ def dispatch_daily_notifications():
                     sent_today = r2.scalar_one_or_none() is not None
                     if not sent_today:
                         send_morning_prompt.delay(user.id, user_today.isoformat(), 0)
-                if et and (et.hour == now_time.hour and et.minute <= now_time.minute < et.minute + 15):
+                if et and _in_dispatch_window(now_m, et):
                     r2 = await session.execute(
                         select(NotificationLog).where(
                             NotificationLog.user_id == user.id,

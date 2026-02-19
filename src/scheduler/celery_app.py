@@ -23,7 +23,7 @@ app.conf.update(
     beat_schedule={
         "dispatch-daily-notifications": {
             "task": "src.scheduler.tasks.dispatch_daily_notifications",
-            "schedule": crontab(minute="*/15"),
+            "schedule": crontab(minute="*"),
         },
     },
 )
