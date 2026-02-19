@@ -28,7 +28,7 @@ services:
   app:
     build: .
     ports:
-      - "8000:8000"
+      - "8001:8000"   # 8001 на хосте (8000 занят), внутри контейнера — 8000
     environment:
       DATABASE_URL: postgresql+asyncpg://user:password@postgres:5432/planning_bot
       REDIS_URL: redis://redis:6379/0
