@@ -15,3 +15,12 @@ class SettingsStates(StatesGroup):
     awaiting_evening_time = State()
     awaiting_interval_minutes = State()
     awaiting_max_attempts = State()
+
+
+class MenuStates(StatesGroup):
+    main = State()
+    plan = State()
+    stats = State()
+    settings = State()
+    settings_notify = State()
+    settings_intervals = State()

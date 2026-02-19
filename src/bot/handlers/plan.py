@@ -7,8 +7,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.bot.keyboards import morning_reply_keyboard
-from src.bot.states import PlanStates
+from src.bot.keyboards import main_menu_keyboard, morning_reply_keyboard
+from src.bot.states import MenuStates, PlanStates
 from src.bot.text import (
     MORNING_PROMPT,
     PLAN_ALREADY_EXISTS_TODAY,
@@ -61,13 +61,15 @@ async def receive_plan(message: Message, session: AsyncSession, state: FSMContex
     task_texts = parse_plan_lines(message.text)
     await save_plan(session, user.id, plan_date, task_texts)
     await state.clear()
-    await message.answer(PLAN_SAVED)
+    await state.set_state(MenuStates.main)
+    await message.answer(PLAN_SAVED, reply_markup=main_menu_keyboard())
 
 
 @router.message(PlanStates.awaiting_plan, F.text == "Пропустить сегодня ⏭")
 async def skip_plan(message: Message, state: FSMContext):
     await state.clear()
-    await message.answer(PLAN_SKIPPED)
+    await state.set_state(MenuStates.main)
+    await message.answer(PLAN_SKIPPED, reply_markup=main_menu_keyboard())
 
 
 @router.message(PlanStates.awaiting_plan, F.text == "Отправил ✅")
@@ -76,13 +78,14 @@ async def already_sent(message: Message):
 
 
 @router.message(Command("delete_plan"))
-async def cmd_delete_plan(message: Message, session: AsyncSession):
+async def cmd_delete_plan(message: Message, session: AsyncSession, state: FSMContext):
     user = await get_user_or_ask_timezone(session, message.from_user.id, message)
     if not user:
         return
     today = date.today()
     deleted = await delete_plan(session, user.id, today)
+    await state.set_state(MenuStates.main)
     if deleted:
-        await message.answer(PLAN_DELETED)
+        await message.answer(PLAN_DELETED, reply_markup=main_menu_keyboard())
     else:
-        await message.answer(PLAN_NOT_FOUND)
+        await message.answer(PLAN_NOT_FOUND, reply_markup=main_menu_keyboard())

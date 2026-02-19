@@ -6,11 +6,13 @@ import re
 
 from aiogram import F, Router
 from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession
 import json
 
 from src.bot.keyboards import main_menu_keyboard, tz_keyboard, webapp_keyboard
+from src.bot.states import MenuStates
 from src.bot.text import COMMANDS_OVERVIEW, TIMEZONE_CHOOSE_PROMPT, WELCOME, TZ_SET, format_settings
 from src.bot.user_flow import get_user_or_ask_timezone
 from src.config import Settings
@@ -217,15 +219,15 @@ async def cmd_webapp(message: Message, session: AsyncSession):
 
 
 @router.message(F.text.in_(ALLOWED_TZ))
-async def set_timezone(message: Message, session: AsyncSession):
+async def set_timezone(message: Message, session: AsyncSession, state: FSMContext):
     tz = message.text.strip()
     user = await get_user_by_telegram_id(session, message.from_user.id)
     if not user:
         user = await get_or_create_user(session, message.from_user.id, timezone=tz)
     else:
         await update_user_timezone(session, user.id, tz)
-    # Remove the reply-keyboard with timezone buttons, then show inline main menu.
     await message.answer(TZ_SET, reply_markup=ReplyKeyboardRemove())
+    await state.set_state(MenuStates.main)
     await message.answer("Выберите раздел:", reply_markup=main_menu_keyboard())
     webapp_url = _build_webapp_url()
     if webapp_url:
@@ -233,7 +235,7 @@ async def set_timezone(message: Message, session: AsyncSession):
 
 
 @router.message(F.web_app_data)
-async def handle_webapp_data(message: Message, session: AsyncSession):
+async def handle_webapp_data(message: Message, session: AsyncSession, state: FSMContext):
     """Handle data sent from WebApp (e.g., timezone detection)."""
     try:
         data = json.loads(message.web_app_data.data)
@@ -245,13 +247,14 @@ async def handle_webapp_data(message: Message, session: AsyncSession):
             except Exception:
                 await message.answer(f"❌ Неверный часовой пояс: {tz}")
                 return
-            
+
             user = await get_user_by_telegram_id(session, message.from_user.id)
             if not user:
                 user = await get_or_create_user(session, message.from_user.id, timezone=tz)
             else:
                 await update_user_timezone(session, user.id, tz)
             await message.answer(f"✅ Часовой пояс сохранён: {tz}")
+            await state.set_state(MenuStates.main)
             await message.answer("Выберите раздел:", reply_markup=main_menu_keyboard())
             webapp_url = _build_webapp_url()
             if webapp_url:
