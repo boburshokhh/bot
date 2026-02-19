@@ -46,3 +46,7 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# Frontend build artifacts
+frontend/node_modules/
+static/dist/

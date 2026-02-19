@@ -5,11 +5,11 @@ import re
 
 from aiogram import F, Router
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import Message, ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession
 import json
 
-from src.bot.keyboards import tz_keyboard, webapp_keyboard
+from src.bot.keyboards import main_menu_keyboard, tz_keyboard, webapp_keyboard
 from src.bot.text import COMMANDS_OVERVIEW, TIMEZONE_CHOOSE_PROMPT, WELCOME, TZ_SET, format_settings
 from src.config import Settings
 from src.services.user import (
@@ -206,7 +206,9 @@ async def set_timezone(message: Message, session: AsyncSession):
         user = await get_or_create_user(session, message.from_user.id, timezone=tz)
     else:
         await update_user_timezone(session, user.id, tz)
-    await message.answer(f"{TZ_SET}\n\n{COMMANDS_OVERVIEW}", reply_markup=None)
+    # Remove the reply-keyboard with timezone buttons, then show inline main menu.
+    await message.answer(TZ_SET, reply_markup=ReplyKeyboardRemove())
+    await message.answer("Выберите раздел:", reply_markup=main_menu_keyboard())
     webapp_url = _build_webapp_url()
     if webapp_url:
         await message.answer("Открыть панель управления:", reply_markup=webapp_keyboard(webapp_url))
@@ -231,10 +233,8 @@ async def handle_webapp_data(message: Message, session: AsyncSession):
                 user = await get_or_create_user(session, message.from_user.id, timezone=tz)
             else:
                 await update_user_timezone(session, user.id, tz)
-            await message.answer(
-                f"✅ Часовой пояс сохранён: {tz}\n\n{COMMANDS_OVERVIEW}",
-                reply_markup=None
-            )
+            await message.answer(f"✅ Часовой пояс сохранён: {tz}")
+            await message.answer("Выберите раздел:", reply_markup=main_menu_keyboard())
             webapp_url = _build_webapp_url()
             if webapp_url:
                 await message.answer("Открыть панель управления:", reply_markup=webapp_keyboard(webapp_url))

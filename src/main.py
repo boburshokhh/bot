@@ -55,6 +55,9 @@ async def health():
 
 @app.get("/webapp")
 async def webapp():
+    dist_index = PROJECT_ROOT / "static" / "dist" / "index.html"
+    if dist_index.exists():
+        return FileResponse(dist_index)
     return FileResponse(PROJECT_ROOT / "templates" / "webapp.html")
 
 

@@ -85,3 +85,90 @@ def webapp_keyboard(url: str) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="Открыть WebApp", web_app=WebAppInfo(url=url))],
         ]
     )
+
+
+# --- Inline menu navigation (post-timezone) ---
+# callback_data constants
+MENU_MAIN = "menu_main"
+MENU_PLAN = "menu_plan"
+MENU_STATS = "menu_stats"
+MENU_SETTINGS = "menu_settings"
+MENU_SETTINGS_NOTIFY = "menu_settings_notify"
+MENU_SETTINGS_INTERVALS = "menu_settings_intervals"
+
+ACTION_HELP = "action_help"
+ACTION_PLAN_ADD = "action_plan_add"
+ACTION_TODAY = "action_today"
+ACTION_HISTORY = "action_history"
+ACTION_STATS = "action_stats"
+
+ACTION_SETTINGS_TIMEZONE = "action_settings_timezone"
+ACTION_SETTINGS_SET_MORNING = "action_settings_set_morning"
+ACTION_SETTINGS_SET_EVENING = "action_settings_set_evening"
+ACTION_SETTINGS_SET_INTERVAL = "action_settings_set_interval"
+ACTION_SETTINGS_SET_ATTEMPTS = "action_settings_set_attempts"
+
+
+def _nav_rows(*, back_to: str) -> list[list[InlineKeyboardButton]]:
+    # Keep both buttons everywhere (per spec), even if both go to main.
+    return [[
+        InlineKeyboardButton(text="⬅️ Назад", callback_data=back_to),
+        InlineKeyboardButton(text="🏠 Главное меню", callback_data=MENU_MAIN),
+    ]]
+
+
+def main_menu_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📝 План", callback_data=MENU_PLAN)],
+        [InlineKeyboardButton(text="📊 Статистика", callback_data=MENU_STATS)],
+        [InlineKeyboardButton(text="⚙️ Настройки", callback_data=MENU_SETTINGS)],
+        [InlineKeyboardButton(text="❓ Помощь", callback_data=ACTION_HELP)],
+    ])
+
+
+def plan_submenu_keyboard() -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text="➕ Добавить план", callback_data=ACTION_PLAN_ADD)],
+        [InlineKeyboardButton(text="📅 План на сегодня", callback_data=ACTION_TODAY)],
+        [InlineKeyboardButton(text="📜 История", callback_data=ACTION_HISTORY)],
+    ]
+    rows += _nav_rows(back_to=MENU_MAIN)
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def stats_submenu_keyboard() -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text="📈 Общая статистика", callback_data=ACTION_STATS)],
+        [InlineKeyboardButton(text="📅 План на сегодня", callback_data=ACTION_TODAY)],
+        [InlineKeyboardButton(text="📜 История", callback_data=ACTION_HISTORY)],
+    ]
+    rows += _nav_rows(back_to=MENU_MAIN)
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def settings_submenu_keyboard() -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text="🌍 Часовой пояс", callback_data=ACTION_SETTINGS_TIMEZONE)],
+        [InlineKeyboardButton(text="⏰ Время уведомлений", callback_data=MENU_SETTINGS_NOTIFY)],
+        [InlineKeyboardButton(text="🔄 Интервалы", callback_data=MENU_SETTINGS_INTERVALS)],
+    ]
+    rows += _nav_rows(back_to=MENU_MAIN)
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def notify_time_submenu_keyboard() -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text="🌅 Настроить утреннее время", callback_data=ACTION_SETTINGS_SET_MORNING)],
+        [InlineKeyboardButton(text="🌆 Настроить вечернее время", callback_data=ACTION_SETTINGS_SET_EVENING)],
+    ]
+    rows += _nav_rows(back_to=MENU_SETTINGS)
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def intervals_submenu_keyboard() -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text="⏱️ Настроить интервал", callback_data=ACTION_SETTINGS_SET_INTERVAL)],
+        [InlineKeyboardButton(text="🔢 Настроить максимум попыток", callback_data=ACTION_SETTINGS_SET_ATTEMPTS)],
+    ]
+    rows += _nav_rows(back_to=MENU_SETTINGS)
+    return InlineKeyboardMarkup(inline_keyboard=rows)

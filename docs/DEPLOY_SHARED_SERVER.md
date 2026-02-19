@@ -160,6 +160,8 @@ services:
 
 ## Шаг 5 — Запустить бота
 
+При сборке Docker образ автоматически собирает Vue.js фронтенд (multi-stage build — Node.js 20 + Python 3.11). Никаких дополнительных действий для фронтенда не требуется.
+
 **Standalone:**
 
 ```bash
@@ -173,6 +175,8 @@ docker compose up -d --build
 cd /opt/bot
 docker compose -f docker-compose.remote.yml up -d --build
 ```
+
+> **Первая сборка** займёт немного дольше — Docker скачает образ Node.js и соберёт фронтенд.
 
 Один раз выполнить миграции (standalone или с любой машины, откуда есть доступ к БД):
 

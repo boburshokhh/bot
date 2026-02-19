@@ -15,7 +15,8 @@
 
 ## Стек
 
-- Python 3.11, aiogram 3, FastAPI (webhook), Celery + Redis, PostgreSQL, Alembic
+- **Backend:** Python 3.11, aiogram 3, FastAPI (webhook), Celery + Redis, PostgreSQL, Alembic
+- **Frontend (WebApp):** Vue.js 3 + Element Plus + Vite, автотема Telegram (light/dark)
 
 ## Локальный запуск (Docker)
 
@@ -98,6 +99,32 @@
 
 **Подробный гайд:** пошаговый деплой на Ubuntu (в том числе второй/параллельный сервер) и настройка webhook — [docs/DEPLOYMENT_UBUNTU_WEBHOOK.md](docs/DEPLOYMENT_UBUNTU_WEBHOOK.md).  
 **Настройка домена под сервер:** DNS, Nginx, HTTPS, webhook — [docs/DOMAIN_SETUP.md](docs/DOMAIN_SETUP.md).
+
+## Разработка фронтенда (WebApp)
+
+Фронтенд находится в директории `frontend/` и использует Vue.js 3 + Element Plus + Vite.
+
+### Установка и разработка
+
+```bash
+cd frontend
+npm install
+npm run dev      # dev-сервер с HMR на localhost:5173
+npm run build    # сборка в static/dist/
+```
+
+> **Примечание:** В режиме `npm run dev` API-запросы проксируются на `http://localhost:8000` (настроено в `vite.config.js`).
+
+### Сборка перед деплоем
+
+```bash
+cd frontend
+npm run build
+```
+
+Собранные файлы попадают в `static/dist/` и автоматически отдаются FastAPI при открытии `/webapp`.
+
+При Docker-сборке (`docker compose up -d --build`) фронтенд собирается автоматически на этапе multi-stage сборки образа — отдельно запускать `npm run build` не нужно.
 
 ## Разработка
 
