@@ -7,7 +7,7 @@ from aiogram.filters import Command
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.services.user import get_user_by_telegram_id
+from src.bot.user_flow import get_user_or_ask_timezone
 from src.services.stats import get_today_plan, get_history, get_stats, get_completion_percent_for_plan
 
 router = Router()
@@ -15,9 +15,8 @@ router = Router()
 
 @router.message(Command("today"))
 async def cmd_today(message: Message, session: AsyncSession):
-    user = await get_user_by_telegram_id(session, message.from_user.id)
+    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
     if not user:
-        await message.answer("Сначала отправь /start и выбери часовой пояс.")
         return
     plan = await get_today_plan(session, user.id)
     if not plan or not plan.tasks:
@@ -35,9 +34,8 @@ async def cmd_today(message: Message, session: AsyncSession):
 
 @router.message(Command("history"), F.text.regexp(re.compile(r"^/history\s+(\d{4})-(\d{2})$")))
 async def cmd_history(message: Message, session: AsyncSession):
-    user = await get_user_by_telegram_id(session, message.from_user.id)
+    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
     if not user:
-        await message.answer("Сначала отправь /start.")
         return
     match = re.match(r"^/history\s+(\d{4})-(\d{2})$", message.text or "")
     if not match:
@@ -65,9 +63,8 @@ async def cmd_history_usage(message: Message):
 
 @router.message(Command("stats"))
 async def cmd_stats(message: Message, session: AsyncSession):
-    user = await get_user_by_telegram_id(session, message.from_user.id)
+    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
     if not user:
-        await message.answer("Сначала отправь /start.")
         return
     s = await get_stats(session, user.id)
     await message.answer(

@@ -12,22 +12,23 @@ from src.bot.states import PlanStates
 from src.bot.text import (
     MORNING_PROMPT,
     PLAN_ALREADY_EXISTS_TODAY,
+    PLAN_DELETED,
+    PLAN_NOT_FOUND,
     PLAN_OPENED_MANUALLY,
     PLAN_SAVED,
     PLAN_SKIPPED,
 )
+from src.bot.user_flow import get_user_or_ask_timezone
 from src.logic.plan_parser import parse_plan_lines, validate_plan_text
-from src.services.plan import get_plan_for_date, save_plan
-from src.services.user import get_user_by_telegram_id
+from src.services.plan import delete_plan, get_plan_for_date, save_plan
 
 router = Router()
 
 
 @router.message(Command("plan"))
 async def cmd_plan(message: Message, session: AsyncSession, state: FSMContext):
-    user = await get_user_by_telegram_id(session, message.from_user.id)
+    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
     if not user:
-        await message.answer("Сначала отправь /start и выбери часовой пояс.")
         return
     today = date.today()
     existing_plan = await get_plan_for_date(session, user.id, today)
@@ -47,9 +48,8 @@ async def receive_plan(message: Message, session: AsyncSession, state: FSMContex
     if not ok:
         await message.answer(err)
         return
-    user = await get_user_by_telegram_id(session, message.from_user.id)
+    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
     if not user:
-        await message.answer("Сначала отправь /start и выбери часовой пояс.")
         return
     data = await state.get_data()
     plan_date = data.get("plan_date")
@@ -73,3 +73,16 @@ async def skip_plan(message: Message, state: FSMContext):
 @router.message(PlanStates.awaiting_plan, F.text == "Отправил ✅")
 async def already_sent(message: Message):
     await message.answer("Пришли план текстом — каждый пункт с новой строки.")
+
+
+@router.message(Command("delete_plan"))
+async def cmd_delete_plan(message: Message, session: AsyncSession):
+    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
+    if not user:
+        return
+    today = date.today()
+    deleted = await delete_plan(session, user.id, today)
+    if deleted:
+        await message.answer(PLAN_DELETED)
+    else:
+        await message.answer(PLAN_NOT_FOUND)

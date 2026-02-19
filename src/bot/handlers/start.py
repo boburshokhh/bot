@@ -12,6 +12,7 @@ import json
 
 from src.bot.keyboards import main_menu_keyboard, tz_keyboard, webapp_keyboard
 from src.bot.text import COMMANDS_OVERVIEW, TIMEZONE_CHOOSE_PROMPT, WELCOME, TZ_SET, format_settings
+from src.bot.user_flow import get_user_or_ask_timezone
 from src.config import Settings
 from src.services.user import (
     get_or_create_user,
@@ -116,9 +117,8 @@ async def cmd_help(message: Message):
 
 @router.message(Command("settings"))
 async def cmd_settings(message: Message, session: AsyncSession):
-    user = await get_user_by_telegram_id(session, message.from_user.id)
+    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
     if not user:
-        await message.answer("Сначала отправь /start и выбери часовой пояс.")
         return
     await message.answer(
         format_settings(
@@ -136,18 +136,16 @@ async def cmd_settings(message: Message, session: AsyncSession):
 
 @router.message(Command("timezone"))
 async def cmd_timezone(message: Message, session: AsyncSession):
-    user = await get_user_by_telegram_id(session, message.from_user.id)
+    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
     if not user:
-        await message.answer("Сначала отправь /start и выбери часовой пояс.")
         return
     await message.answer(TIMEZONE_CHOOSE_PROMPT, reply_markup=tz_keyboard(include_detect=True))
 
 
 @router.message(Command("set_morning"))
 async def cmd_set_morning(message: Message, session: AsyncSession):
-    user = await get_user_by_telegram_id(session, message.from_user.id)
+    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
     if not user:
-        await message.answer("Сначала отправь /start и выбери часовой пояс.")
         return
     value = _extract_command_arg(message.text)
     t = _parse_hhmm(value)
@@ -160,9 +158,8 @@ async def cmd_set_morning(message: Message, session: AsyncSession):
 
 @router.message(Command("set_evening"))
 async def cmd_set_evening(message: Message, session: AsyncSession):
-    user = await get_user_by_telegram_id(session, message.from_user.id)
+    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
     if not user:
-        await message.answer("Сначала отправь /start и выбери часовой пояс.")
         return
     value = _extract_command_arg(message.text)
     t = _parse_hhmm(value)
@@ -175,9 +172,8 @@ async def cmd_set_evening(message: Message, session: AsyncSession):
 
 @router.message(Command("set_interval"))
 async def cmd_set_interval(message: Message, session: AsyncSession):
-    user = await get_user_by_telegram_id(session, message.from_user.id)
+    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
     if not user:
-        await message.answer("Сначала отправь /start и выбери часовой пояс.")
         return
     value = _extract_command_arg(message.text)
     if not value.isdigit():
@@ -193,9 +189,8 @@ async def cmd_set_interval(message: Message, session: AsyncSession):
 
 @router.message(Command("set_attempts"))
 async def cmd_set_attempts(message: Message, session: AsyncSession):
-    user = await get_user_by_telegram_id(session, message.from_user.id)
+    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
     if not user:
-        await message.answer("Сначала отправь /start и выбери часовой пояс.")
         return
     value = _extract_command_arg(message.text)
     if not value.isdigit():
@@ -211,9 +206,8 @@ async def cmd_set_attempts(message: Message, session: AsyncSession):
 
 @router.message(Command("webapp"))
 async def cmd_webapp(message: Message, session: AsyncSession):
-    user = await get_user_by_telegram_id(session, message.from_user.id)
+    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
     if not user:
-        await message.answer("Сначала отправь /start и выбери часовой пояс.")
         return
     webapp_url = _build_webapp_url()
     if not webapp_url:

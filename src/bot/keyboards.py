@@ -99,6 +99,7 @@ MENU_SETTINGS_INTERVALS = "menu_settings_intervals"
 ACTION_HELP = "action_help"
 ACTION_PLAN_ADD = "action_plan_add"
 ACTION_TODAY = "action_today"
+ACTION_DELETE_PLAN = "action_delete_plan"
 ACTION_HISTORY = "action_history"
 ACTION_STATS = "action_stats"
 
@@ -130,6 +131,7 @@ def plan_submenu_keyboard() -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = [
         [InlineKeyboardButton(text="➕ Добавить план", callback_data=ACTION_PLAN_ADD)],
         [InlineKeyboardButton(text="📅 План на сегодня", callback_data=ACTION_TODAY)],
+        [InlineKeyboardButton(text="🗑️ Удалить план", callback_data=ACTION_DELETE_PLAN)],
         [InlineKeyboardButton(text="📜 История", callback_data=ACTION_HISTORY)],
     ]
     rows += _nav_rows(back_to=MENU_MAIN)

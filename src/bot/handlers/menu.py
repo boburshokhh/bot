@@ -9,6 +9,7 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.bot.keyboards import (
+    ACTION_DELETE_PLAN,
     ACTION_HELP,
     ACTION_HISTORY,
     ACTION_PLAN_ADD,
@@ -35,8 +36,8 @@ from src.bot.keyboards import (
 )
 from src.bot.text import COMMANDS_OVERVIEW, TIMEZONE_CHOOSE_PROMPT
 from src.bot.states import SettingsStates
+from src.bot.user_flow import get_user_or_ask_timezone
 from src.services.user import (
-    get_user_by_telegram_id,
     update_morning_reminder_settings,
     update_notify_times,
 )
@@ -129,6 +130,16 @@ async def action_today(callback: CallbackQuery, session: AsyncSession):
     await cmd_today(callback.message, session)
 
 
+@router.callback_query(F.data == ACTION_DELETE_PLAN)
+async def action_delete_plan(callback: CallbackQuery, session: AsyncSession):
+    await callback.answer()
+    if not callback.message:
+        return
+    from src.bot.handlers.plan import cmd_delete_plan
+
+    await cmd_delete_plan(callback.message, session)
+
+
 @router.callback_query(F.data == ACTION_HISTORY)
 async def action_history(callback: CallbackQuery):
     await callback.answer()
@@ -192,10 +203,9 @@ async def receive_morning_time(message: Message, session: AsyncSession, state: F
     if not t:
         await message.answer("Неверный формат. Введите HH:MM (например 07:30).")
         return
-    user = await get_user_by_telegram_id(session, message.from_user.id)
+    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
     if not user:
         await state.clear()
-        await message.answer("Сначала отправь /start и выбери часовой пояс.")
         return
     await update_notify_times(session, user.id, notify_morning_time=t)
     await state.clear()
@@ -208,10 +218,9 @@ async def receive_evening_time(message: Message, session: AsyncSession, state: F
     if not t:
         await message.answer("Неверный формат. Введите HH:MM (например 21:30).")
         return
-    user = await get_user_by_telegram_id(session, message.from_user.id)
+    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
     if not user:
         await state.clear()
-        await message.answer("Сначала отправь /start и выбери часовой пояс.")
         return
     await update_notify_times(session, user.id, notify_evening_time=t)
     await state.clear()
@@ -228,10 +237,9 @@ async def receive_interval_minutes(message: Message, session: AsyncSession, stat
     if not (5 <= minutes <= 720):
         await message.answer("Интервал должен быть в диапазоне 5-720 минут.")
         return
-    user = await get_user_by_telegram_id(session, message.from_user.id)
+    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
     if not user:
         await state.clear()
-        await message.answer("Сначала отправь /start и выбери часовой пояс.")
         return
     await update_morning_reminder_settings(session, user.id, interval_minutes=minutes)
     await state.clear()
@@ -248,10 +256,9 @@ async def receive_max_attempts(message: Message, session: AsyncSession, state: F
     if not (0 <= attempts <= 10):
         await message.answer("Количество повторов должно быть в диапазоне 0-10.")
         return
-    user = await get_user_by_telegram_id(session, message.from_user.id)
+    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
     if not user:
         await state.clear()
-        await message.answer("Сначала отправь /start и выбери часовой пояс.")
         return
     await update_morning_reminder_settings(session, user.id, max_attempts=attempts)
     await state.clear()

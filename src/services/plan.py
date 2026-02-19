@@ -60,3 +60,23 @@ async def get_plan_by_id(session: AsyncSession, plan_id: int) -> Plan | None:
         .options(selectinload(Plan.tasks).selectinload(Task.status))
     )
     return r.scalar_one_or_none()
+
+
+async def delete_plan(
+    session: AsyncSession,
+    user_id: int,
+    plan_date: date,
+) -> bool:
+    """
+    Delete plan for user+date. Returns True if plan was deleted, False if not found.
+    Tasks and TaskStatus are deleted automatically via cascade.
+    """
+    r = await session.execute(
+        select(Plan).where(Plan.user_id == user_id, Plan.date == plan_date)
+    )
+    plan = r.scalar_one_or_none()
+    if not plan:
+        return False
+    await session.delete(plan)
+    await session.flush()
+    return True
