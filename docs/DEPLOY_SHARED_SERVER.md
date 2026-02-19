@@ -1,60 +1,104 @@
-# Deploy on shared Ubuntu server (multiple projects)
+# Деплой на общем Ubuntu-сервере (несколько проектов)
 
-Step-by-step guide to deploy the Planning Bot on an Ubuntu server where **other projects already run**. You will check ports first, then deploy without conflicts. The server has a **public IP** and a **domain** for the webhook.
-
----
-
-## What you need
-
-- SSH access to the Ubuntu server
-- A domain (e.g. `bot.yourdomain.com`) with an **A record** pointing to the server IP
-- Telegram bot token from [@BotFather](https://t.me/BotFather)
+Пошаговая инструкция по развёртыванию Planning Bot на Ubuntu-сервере, где **уже работают другие проекты**. Сначала проверяем занятые порты, затем деплоим без конфликтов. У сервера есть **белый IP** и **домен** для webhook.
 
 ---
 
-## Step 1 — Check which ports are free
+## Что понадобится
 
-On the server, run:
+- Доступ по SSH к Ubuntu-серверу
+- Домен (например `bot.yourdomain.com`) с **A-записью** на IP сервера
+- Токен бота Telegram от [@BotFather](https://t.me/BotFather)
+
+---
+
+## Шаг 0 — Установить Docker (если ещё нет)
+
+На сервере выполните:
 
 ```bash
-# Quick list of all listening TCP ports
+# Обновление системы
+sudo apt update && sudo apt upgrade -y
+
+# Зависимости
+sudo apt install -y ca-certificates curl gnupg
+
+# Репозиторий Docker
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+# Текущий пользователь в группу docker (чтобы не писать sudo каждый раз)
+sudo usermod -aG docker $USER
+```
+
+**Важно:** после `usermod` выйдите из SSH и зайдите снова (или выполните `newgrp docker`), чтобы группа применилась.
+
+Проверка:
+
+```bash
+docker --version
+docker compose version
+```
+
+Git (если ещё не установлен):
+
+```bash
+sudo apt install -y git
+```
+
+---
+
+## Шаг 1 — Проверить, какие порты свободны
+
+На сервере выполните:
+
+```bash
+# Список всех слушающих TCP-портов
 ss -tlnp
 ```
 
-Or use the project script (from the repo root on the server):
+Или скрипт из репозитория (из корня проекта на сервере):
 
 ```bash
-cd /opt/bot   # or wherever you will clone the project
+cd /opt/bot   # или каталог, куда клонируете проект
 bash scripts/check-ports.sh
 ```
 
-**Ports this bot uses:**
+**Порты, которые использует бот:**
 
-| Service    | Default host port | If busy, use   |
-|-----------|--------------------|----------------|
-| App (HTTP)| 8000 or 8001       | Other free port, e.g. 8002 |
-| PostgreSQL| 5432 or 5433       | 5434, 5435… (standalone only) |
-| Redis     | 6379 or 6380       | 6381, 6382… (standalone only) |
-| Nginx     | 80, 443            | Usually **shared** with other sites (new server block) |
+| Сервис     | Порт на хосте по умолчанию | Если занят — взять |
+|------------|----------------------------|---------------------|
+| App (HTTP) | 8000 или 8001             | Другой свободный, например 8002 |
+| PostgreSQL | 5432 или 5433             | 5434, 5435… (только standalone) |
+| Redis      | 6379 или 6380             | 6381, 6382… (только standalone) |
+| Nginx      | 80, 443                   | Обычно **общие** с другими сайтами (новый server block) |
 
-**Rule:** If a port appears in `ss -tlnp`, it is **occupied**. In `docker-compose.yml` use a **different host port** (left side of `"HOST:CONTAINER"`). Inside containers we keep 5432, 6379, 8000 unchanged.
-
----
-
-## Step 2 — Choose deployment type
-
-- **Standalone:** This server runs bot + its own PostgreSQL + Redis. Use `docker-compose.yml`. Adjust host ports in it if needed (see Step 4).
-- **Shared DB:** PostgreSQL and Redis are on another server. Use `docker-compose.remote.yml` and set `DATABASE_URL` and `REDIS_URL` in `.env` to that server. Only the **app port** (e.g. 8000 or 8001) is used on this host.
+**Правило:** если порт есть в выводе `ss -tlnp` — он **занят**. В `docker-compose.yml` укажите **другой** порт на хосте (левая часть `"ХОСТ:КОНТЕЙНЕР"`). Внутри контейнеров порты 5432, 6379, 8000 не меняем.
 
 ---
 
-## Step 3 — Clone project and prepare `.env`
+## Шаг 2 — Выбрать тип деплоя
+
+**Используйте только один вариант** — либо standalone, либо общая БД. Не запускайте оба compose подряд.
+
+- **Standalone:** на этом сервере крутятся бот + свой PostgreSQL + Redis. Запуск: `docker compose up -d --build` (файл `docker-compose.yml`). При необходимости меняем порты на хосте (шаг 4).
+- **Общая БД:** PostgreSQL и Redis на другом сервере. Запуск: `docker compose -f docker-compose.remote.yml up -d --build`. В `.env` задаём `DATABASE_URL` и `REDIS_URL` на тот сервер. Приложение по умолчанию слушает порт **8001** на хосте (чтобы не конфликтовать с занятым 8000).
+
+---
+
+## Шаг 3 — Клонировать проект и подготовить `.env`
 
 ```bash
 sudo mkdir -p /opt/bot
 sudo chown $USER:$USER /opt/bot
 cd /opt/bot
-git clone <YOUR_REPO_URL> .
+git clone <URL_ВАШЕГО_РЕПОЗИТОРИЯ> .
 ```
 
 ```bash
@@ -62,11 +106,11 @@ cp .env.example .env
 nano .env
 ```
 
-**Standalone** — example `.env`:
+**Standalone** — пример `.env`:
 
 ```env
 TELEGRAM_BOT_TOKEN=123456:ABC-DEF...
-WEBHOOK_SECRET=your_random_secret_string
+WEBHOOK_SECRET=ваша_случайная_строка_секрета
 WEBHOOK_BASE_URL=https://bot.yourdomain.com
 
 DATABASE_URL=postgresql+asyncpg://user:password@postgres:5432/planning_bot
@@ -75,46 +119,46 @@ REDIS_URL=redis://redis:6379/0
 LOG_LEVEL=INFO
 ```
 
-**Shared DB** — set `DATABASE_URL` and `REDIS_URL` to the **other server** (IP/host and port). Same `TELEGRAM_BOT_TOKEN`, `WEBHOOK_BASE_URL`, `WEBHOOK_SECRET`.
+**Общая БД** — укажите `DATABASE_URL` и `REDIS_URL` на **другой сервер** (IP/хост и порт). Остальное так же: `TELEGRAM_BOT_TOKEN`, `WEBHOOK_BASE_URL`, `WEBHOOK_SECRET`.
 
-Use strong passwords; for standalone they must match `docker-compose.yml` (or set via env there).
+Пароли делайте сложными; при standalone они должны совпадать с теми, что в `docker-compose.yml` (или задаются через переменные там).
 
 ---
 
-## Step 4 — Set host ports in Docker (avoid conflicts)
+## Шаг 4 — Задать порты на хосте в Docker (избежать конфликтов)
 
-If Step 1 showed that 8000, 5432, or 6379 are in use, edit the compose file you use.
+Если на шаге 1 оказалось, что заняты 8000, 5432 или 6379 — отредактируйте используемый compose-файл.
 
-**Standalone** — edit `docker-compose.yml`:
+**Standalone** — правка `docker-compose.yml`:
 
 ```yaml
-# Example: app on host 8002, Postgres on 5434, Redis on 6381
+# Пример: приложение на 8002, Postgres на 5434, Redis на 6381
 services:
   postgres:
     ports:
-      - "5434:5432"    # host:container
+      - "5434:5432"    # хост:контейнер
   redis:
     ports:
       - "6381:6379"
   app:
     ports:
-      - "8002:8000"    # Nginx will proxy to 127.0.0.1:8002
+      - "8002:8000"    # Nginx будет проксировать на 127.0.0.1:8002
 ```
 
-**Shared DB** — edit `docker-compose.remote.yml` only if the app port must change:
+**Общая БД** — правка `docker-compose.remote.yml` только если нужно сменить порт приложения:
 
 ```yaml
 services:
   app:
     ports:
-      - "8002:8000"    # if 8000 is busy
+      - "8002:8000"    # если 8000 занят
 ```
 
-Remember the **host port** you chose for the app (e.g. 8002). You will use it in Nginx as `proxy_pass http://127.0.0.1:8002`.
+Запомните **порт на хосте** для приложения (например 8002). Он понадобится в Nginx: `proxy_pass http://127.0.0.1:8002`.
 
 ---
 
-## Step 5 — Start the bot
+## Шаг 5 — Запустить бота
 
 **Standalone:**
 
@@ -123,48 +167,48 @@ cd /opt/bot
 docker compose up -d --build
 ```
 
-**Shared DB:**
+**Общая БД:**
 
 ```bash
 cd /opt/bot
 docker compose -f docker-compose.remote.yml up -d --build
 ```
 
-Run migrations once (standalone or from any host that can reach the DB):
+Один раз выполнить миграции (standalone или с любой машины, откуда есть доступ к БД):
 
 ```bash
 docker compose exec app alembic upgrade head
 ```
 
-Check:
+Проверка:
 
 ```bash
 docker compose ps
 curl -s http://127.0.0.1:APP_PORT/health
 ```
 
-Replace `APP_PORT` with the host port you set (e.g. 8000 or 8002). Expected: `{"status":"ok"}`.
+Вместо `APP_PORT` подставьте порт приложения на хосте (например 8000 или 8002). Ожидается: `{"status":"ok"}`.
 
 ---
 
-## Step 6 — Nginx + HTTPS (shared 80/443)
+## Шаг 6 — Nginx + HTTPS (общие 80/443)
 
-Other sites can keep using the same Nginx on 80/443. Add a **new server block** for the bot.
+Остальные сайты продолжают работать через тот же Nginx на 80/443. Добавляем **новый server block** для бота.
 
-Install Nginx and Certbot if not already:
+Установите Nginx и Certbot, если ещё не стоят:
 
 ```bash
 sudo apt update
 sudo apt install -y nginx certbot python3-certbot-nginx
 ```
 
-Create config (replace `bot.yourdomain.com` and `APP_PORT`):
+Создайте конфиг (подставьте свой домен и `APP_PORT`):
 
 ```bash
 sudo nano /etc/nginx/sites-available/planning-bot
 ```
 
-Content (use your real app port, e.g. 8002):
+Содержимое (укажите реальный порт приложения, например 8002):
 
 ```nginx
 server {
@@ -201,18 +245,18 @@ server {
 }
 ```
 
-Replace **APP_PORT** with your app’s host port (e.g. 8002).
+Замените **APP_PORT** на порт приложения на хосте (например 8002).
 
-Get SSL certificate:
+Получение SSL-сертификата:
 
 ```bash
 sudo ln -sf /etc/nginx/sites-available/planning-bot /etc/nginx/sites-enabled/
-# If first time: use a minimal server { listen 80; server_name bot.yourdomain.com; ... } then:
+# При первом запуске можно временно оставить только server { listen 80; server_name bot.yourdomain.com; ... }, затем:
 sudo nginx -t && sudo systemctl reload nginx
 sudo certbot --nginx -d bot.yourdomain.com
 ```
 
-If Certbot added its own SSL block, edit the file again to add the `location /webhook` and `location /health` blocks and set `proxy_pass http://127.0.0.1:APP_PORT;`. Then:
+Если Certbot сам добавил блок с SSL — снова отредактируйте файл: добавьте `location /webhook` и `location /health` с `proxy_pass http://127.0.0.1:APP_PORT;`. Затем:
 
 ```bash
 sudo nginx -t && sudo systemctl reload nginx
@@ -220,27 +264,27 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ---
 
-## Step 7 — Set Telegram webhook
+## Шаг 7 — Настроить webhook в Telegram
 
-Use your bot token and domain:
+Подставьте токен бота и домен:
 
 ```bash
 curl -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=https://bot.yourdomain.com/webhook"
 ```
 
-With secret token (recommended):
+С секретным токеном (рекомендуется):
 
 ```bash
 SECRET=$(openssl rand -hex 32)
 echo $SECRET
-# Add WEBHOOK_SECRET=$SECRET to /opt/bot/.env
+# Добавьте WEBHOOK_SECRET=$SECRET в /opt/bot/.env
 
 curl -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
   -H "Content-Type: application/json" \
   -d "{\"url\": \"https://bot.yourdomain.com/webhook\", \"secret_token\": \"$SECRET\"}"
 ```
 
-Check:
+Проверка:
 
 ```bash
 curl -s https://bot.yourdomain.com/health
@@ -249,25 +293,26 @@ curl -s "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
 
 ---
 
-## Summary checklist
+## Чек-лист
 
-- [ ] Ran `ss -tlnp` (or `scripts/check-ports.sh`) and noted occupied ports
-- [ ] Chose free host ports for app (and Postgres/Redis if standalone)
-- [ ] Cloned repo, created `.env` with token, webhook URL, DB/Redis URLs
-- [ ] Updated `docker-compose.yml` or `docker-compose.remote.yml` with chosen host ports
-- [ ] Started stack, ran `alembic upgrade head`, checked `/health` on app port
-- [ ] Added Nginx server block for `bot.yourdomain.com`, `proxy_pass` to correct app port
-- [ ] Got SSL with Certbot, reloaded Nginx
-- [ ] Set webhook with `setWebhook`, verified with `getWebhookInfo` and by messaging the bot
+- [ ] Установили Docker и Docker Compose (шаг 0), при необходимости — Git
+- [ ] Выполнили `ss -tlnp` (или `scripts/check-ports.sh`), зафиксировали занятые порты
+- [ ] Выбрали свободные порты на хосте для приложения (и для Postgres/Redis при standalone)
+- [ ] Клонировали репозиторий, создали `.env` с токеном, URL webhook, URL БД/Redis
+- [ ] При необходимости обновили порты в `docker-compose.yml` или `docker-compose.remote.yml`
+- [ ] Запустили стек, выполнили `alembic upgrade head`, проверили `/health` по порту приложения
+- [ ] Добавили server block в Nginx для `bot.yourdomain.com`, `proxy_pass` на нужный порт приложения
+- [ ] Получили SSL через Certbot, перезагрузили Nginx
+- [ ] Установили webhook через `setWebhook`, проверили через `getWebhookInfo` и сообщением боту
 
 ---
 
-## Troubleshooting
+## Решение проблем
 
-| Problem | Check |
-|--------|--------|
-| Port already in use | `ss -tlnp`; change host port in compose and in Nginx `proxy_pass`. |
-| 502 Bad Gateway | App container running; `proxy_pass` port matches app host port; `curl http://127.0.0.1:APP_PORT/health` works. |
-| Webhook not received | HTTPS URL in `getWebhookInfo`; Nginx proxies `/webhook` to app; firewall allows 80/443. |
+| Проблема | Что проверить |
+|----------|----------------|
+| Порт уже занят | `ss -tlnp`; сменить порт на хосте в compose и в Nginx `proxy_pass`. |
+| 502 Bad Gateway | Контейнер приложения запущен; порт в `proxy_pass` совпадает с портом приложения; `curl http://127.0.0.1:APP_PORT/health` отвечает. |
+| Webhook не приходят | В `getWebhookInfo` указан HTTPS URL; Nginx проксирует `/webhook` на приложение; фаервол разрешает 80/443. |
 
-For more detail (firewall, logs, Celery) see [DEPLOYMENT_UBUNTU_WEBHOOK.md](DEPLOYMENT_UBUNTU_WEBHOOK.md).
+Подробнее (фаервол, логи, Celery) — в [DEPLOYMENT_UBUNTU_WEBHOOK.md](DEPLOYMENT_UBUNTU_WEBHOOK.md).

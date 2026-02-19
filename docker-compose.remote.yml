@@ -1,12 +1,13 @@
 # Вариант деплоя: приложение на этом сервере, PostgreSQL и Redis — на основном.
 # Заполните в .env: DATABASE_URL, REDIS_URL (на IP основного сервера), TELEGRAM_BOT_TOKEN, WEBHOOK_BASE_URL.
-# Запуск: docker compose -f docker-compose.yml -f docker-compose.remote.yml up -d --build
+# Запуск: docker compose -f docker-compose.remote.yml up -d --build
+# Порт 8001 на хосте — чтобы не конфликтовать с другими приложениями на 8000.
 
 services:
   app:
     build: .
     ports:
-      - "8000:8000"
+      - "8001:8000"
     environment:
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL}
