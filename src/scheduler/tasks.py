@@ -35,6 +35,36 @@ def _get_async_session():
     return factory, engine
 
 
+def compute_next_morning_reminder_countdown(
+    *,
+    interval_minutes: int,
+    max_attempts: int,
+    next_attempt: int,
+) -> int | None:
+    """Return countdown in seconds for next reminder attempt or None if no more attempts."""
+    safe_interval = max(1, int(interval_minutes))
+    safe_max_attempts = max(0, int(max_attempts))
+    if next_attempt < 1 or next_attempt > safe_max_attempts:
+        return None
+    return safe_interval * 60
+
+
+async def _get_morning_reminder_policy(user_id: int) -> tuple[int, int]:
+    """Return per-user morning reminder policy: (interval_minutes, max_attempts)."""
+    factory, engine = _get_async_session()
+    try:
+        async with factory() as session:
+            r = await session.execute(select(User).where(User.id == user_id))
+            user = r.scalar_one_or_none()
+            if not user:
+                return 60, 1
+            interval_minutes = max(1, int(user.morning_reminder_interval_minutes or 60))
+            max_attempts = max(0, int(user.morning_reminder_max_attempts or 1))
+            return interval_minutes, max_attempts
+    finally:
+        await engine.dispose()
+
+
 async def _send_morning(user_id: int, plan_date: date, attempt_count: int) -> None:
     settings = Settings()
     factory, engine = _get_async_session()
@@ -149,22 +179,36 @@ async def _send_evening(user_id: int, plan_date: date, attempt_count: int) -> No
 
 @app.task(bind=True, max_retries=3)
 def send_morning_prompt(self, user_id: int, plan_date: str, attempt_count: int = 0):
-    """Send morning plan request. plan_date is ISO (YYYY-MM-DD). Schedules reminder in 1h."""
+    """Send morning plan request. plan_date is ISO (YYYY-MM-DD)."""
     d = date.fromisoformat(plan_date)
     try:
         asyncio.run(_send_morning(user_id, d, attempt_count))
-        send_morning_reminder.apply_async(args=[user_id, plan_date], countdown=3600)
+        interval_minutes, max_attempts = asyncio.run(_get_morning_reminder_policy(user_id))
+        countdown = compute_next_morning_reminder_countdown(
+            interval_minutes=interval_minutes,
+            max_attempts=max_attempts,
+            next_attempt=1,
+        )
+        if countdown is not None:
+            send_morning_reminder.apply_async(
+                args=[user_id, plan_date, 1],
+                countdown=countdown,
+            )
     except Exception as exc:
         countdown = 2 ** (attempt_count + 1) * 60
         raise self.retry(exc=exc, countdown=countdown)
 
 
 @app.task
-def send_morning_reminder(user_id: int, plan_date: str):
-    """One reminder 1h after morning prompt if user hasn't submitted plan."""
+def send_morning_reminder(user_id: int, plan_date: str, reminder_attempt: int = 1):
+    """Reminder(s) after morning prompt if user hasn't submitted a plan yet."""
     async def _run():
         factory, engine = _get_async_session()
         d = date.fromisoformat(plan_date)
+        should_send = False
+        telegram_id = None
+        interval_minutes = 60
+        max_attempts = 1
         async with factory() as session:
             r = await session.execute(select(Plan).where(Plan.user_id == user_id, Plan.date == d))
             if r.scalar_one_or_none() is not None:
@@ -175,13 +219,33 @@ def send_morning_reminder(user_id: int, plan_date: str):
             if not user:
                 await engine.dispose()
                 return
+            interval_minutes = max(1, int(user.morning_reminder_interval_minutes or 60))
+            max_attempts = max(0, int(user.morning_reminder_max_attempts or 1))
+            if reminder_attempt > max_attempts:
+                await engine.dispose()
+                return
+            should_send = True
+            telegram_id = user.telegram_id
         await engine.dispose()
+        if not should_send or telegram_id is None:
+            return
         settings = Settings()
         bot = Bot(token=settings.telegram_bot_token)
         try:
-            await bot.send_message(user.telegram_id, REMINDER_MORNING, reply_markup=morning_reply_keyboard())
+            await bot.send_message(telegram_id, REMINDER_MORNING, reply_markup=morning_reply_keyboard())
         finally:
             await bot.session.close()
+
+        countdown = compute_next_morning_reminder_countdown(
+            interval_minutes=interval_minutes,
+            max_attempts=max_attempts,
+            next_attempt=reminder_attempt + 1,
+        )
+        if countdown is not None:
+            send_morning_reminder.apply_async(
+                args=[user_id, plan_date, reminder_attempt + 1],
+                countdown=countdown,
+            )
 
     asyncio.run(_run())
 

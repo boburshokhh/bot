@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Planning Bot WebApp</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 12px; background: #f4f6f8; color: #1f2937; }
+    .card { background: #fff; border-radius: 12px; padding: 12px; margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+    h2 { margin: 0 0 8px 0; font-size: 16px; }
+    h3 { margin: 0 0 6px 0; font-size: 14px; }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
+    button { border: 0; border-radius: 8px; padding: 8px 10px; background: #2563eb; color: #fff; cursor: pointer; }
+    button.secondary { background: #6b7280; }
+    input, select, textarea { border: 1px solid #d1d5db; border-radius: 8px; padding: 8px; width: 100%; box-sizing: border-box; }
+    textarea { min-height: 80px; resize: vertical; }
+    .task { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px; margin-top: 8px; background: #fafafa; }
+    .muted { color: #6b7280; font-size: 12px; }
+    .status { margin-top: 8px; font-size: 13px; }
+    .ok { color: #059669; }
+    .err { color: #dc2626; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Сегодня</h2>
+    <div id="todayBlock">Загрузка...</div>
+  </div>
+
+  <div class="card">
+    <h2>Создать/обновить план на сегодня</h2>
+    <textarea id="planTasks" placeholder="Каждая задача с новой строки"></textarea>
+    <div class="row">
+      <button id="savePlanBtn">Сохранить план</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Настройки</h2>
+    <div class="row"><label>Часовой пояс</label><input id="tzInput" placeholder="Europe/Moscow" /></div>
+    <div class="row"><label>Утро (HH:MM)</label><input id="morningInput" placeholder="07:00" /></div>
+    <div class="row"><label>Вечер (HH:MM)</label><input id="eveningInput" placeholder="21:00" /></div>
+    <div class="row"><label>Интервал повторов (мин)</label><input id="intervalInput" type="number" min="5" max="720" /></div>
+    <div class="row"><label>Макс. повторов</label><input id="attemptsInput" type="number" min="0" max="10" /></div>
+    <div class="row"><button id="saveSettingsBtn">Сохранить настройки</button></div>
+  </div>
+
+  <div class="card">
+    <h2>Статистика</h2>
+    <div id="statsBlock">Загрузка...</div>
+  </div>
+
+  <div class="card">
+    <h2>История</h2>
+    <div class="row">
+      <input id="historyMonthInput" placeholder="YYYY-MM" />
+      <button class="secondary" id="loadHistoryBtn">Загрузить</button>
+    </div>
+    <div id="historyBlock"></div>
+  </div>
+
+  <div id="statusBar" class="status muted"></div>
+
+  <script src="/static/webapp.js"></script>
+</body>
+</html>

@@ -1,12 +1,15 @@
 """FastAPI app and webhook entry for the planning bot."""
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.redis import RedisStorage
 from fastapi import FastAPI, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
+from src.api import webapp_api_router
 from src.config import Settings
 from src.db import init_async_engine, set_async_session_factory
 from src.bot.handlers import router as bot_router
@@ -40,11 +43,19 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Planning Bot", lifespan=lifespan)
 bot, dp = create_bot_and_dp()
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+app.mount("/static", StaticFiles(directory=str(PROJECT_ROOT / "static")), name="static")
+app.include_router(webapp_api_router)
 
 
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/webapp")
+async def webapp():
+    return FileResponse(PROJECT_ROOT / "templates" / "webapp.html")
 
 
 async def _process_update(body: dict) -> None:

@@ -28,17 +28,30 @@ COMMANDS_OVERVIEW = (
     "/stats - общая статистика\n"
     "/settings - текущие настройки\n"
     "/timezone - сменить часовой пояс\n"
+    "/set_morning HH:MM - время утреннего сообщения\n"
+    "/set_evening HH:MM - время вечернего сообщения\n"
+    "/set_interval MIN - интервал напоминаний, если план не добавлен\n"
+    "/set_attempts N - максимум повторных напоминаний\n"
+    "/webapp - открыть веб-панель управления\n"
     "/help - показать список команд"
 )
 
 
-def format_settings(timezone: str, morning_time: time, evening_time: time) -> str:
+def format_settings(
+    timezone: str,
+    morning_time: time,
+    evening_time: time,
+    reminder_interval_minutes: int,
+    reminder_max_attempts: int,
+) -> str:
     return (
         "Текущие настройки:\n"
         f"• Часовой пояс: {timezone}\n"
         f"• Утреннее напоминание: {morning_time.strftime('%H:%M')}\n"
-        f"• Вечернее напоминание: {evening_time.strftime('%H:%M')}\n\n"
-        "Для смены часового пояса используй /timezone."
+        f"• Вечернее напоминание: {evening_time.strftime('%H:%M')}\n"
+        f"• Интервал повторов утром: {reminder_interval_minutes} мин\n"
+        f"• Повторов максимум: {reminder_max_attempts}\n\n"
+        "Используй /help для списка команд или /webapp для веб-управления."
     )
 
 

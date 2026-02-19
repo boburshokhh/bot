@@ -17,6 +17,8 @@ class User(Base):
     timezone: Mapped[str] = mapped_column(Text, nullable=False, default="UTC")
     notify_morning_time: Mapped[time] = mapped_column(Time, nullable=False, default=time(7, 0))
     notify_evening_time: Mapped[time] = mapped_column(Time, nullable=False, default=time(21, 0))
+    morning_reminder_interval_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
+    morning_reminder_max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     created_at: Mapped[datetime] = mapped_column(nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 

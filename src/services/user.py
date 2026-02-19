@@ -64,3 +64,21 @@ async def update_notify_times(
         user.notify_evening_time = notify_evening_time
     await session.flush()
     return user
+
+
+async def update_morning_reminder_settings(
+    session: AsyncSession,
+    user_id: int,
+    *,
+    interval_minutes: int | None = None,
+    max_attempts: int | None = None,
+) -> User | None:
+    user = await get_user_by_id(session, user_id)
+    if not user:
+        return None
+    if interval_minutes is not None:
+        user.morning_reminder_interval_minutes = interval_minutes
+    if max_attempts is not None:
+        user.morning_reminder_max_attempts = max_attempts
+    await session.flush()
+    return user

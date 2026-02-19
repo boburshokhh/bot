@@ -1,5 +1,11 @@
 """Keyboards for bot."""
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    WebAppInfo,
+)
 
 
 # Common timezones for /start (simplified list)
@@ -52,3 +58,11 @@ def evening_done_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="Добавить комментарий к дню", callback_data="day_comment")],
         [InlineKeyboardButton(text="Готово", callback_data="day_done")],
     ])
+
+
+def webapp_keyboard(url: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Открыть WebApp", web_app=WebAppInfo(url=url))],
+        ]
+    )
