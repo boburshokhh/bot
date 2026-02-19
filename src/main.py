@@ -71,6 +71,10 @@ async def _process_update(body: dict) -> None:
     try:
         from aiogram.types import Update
         update = Update.model_validate(body)
+        if update.message:
+            logger.info("Webhook: message from user_id=%s, text=%s",
+                        update.message.from_user.id if update.message.from_user else None,
+                        (update.message.text or "")[:80])
         await dp.feed_webhook_update(bot, update)
     except Exception as e:
         logger.exception("Webhook processing error: %s", e)

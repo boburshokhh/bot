@@ -1,4 +1,5 @@
 """Start and timezone selection."""
+import logging
 from datetime import datetime, time, timezone
 from zoneinfo import ZoneInfo
 import re
@@ -21,6 +22,7 @@ from src.services.user import (
 )
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 # Valid IANA timezones we offer (subset)
 ALLOWED_TZ = {
@@ -60,8 +62,30 @@ def _build_webapp_url() -> str | None:
 
 @router.message(Command("start"))
 async def cmd_start(message: Message, session: AsyncSession):
-    await get_or_create_user(session, message.from_user.id)
-    await message.answer(WELCOME, reply_markup=tz_keyboard(include_detect=True))
+    user_id = message.from_user.id if message.from_user else None
+    if user_id is None:
+        logger.warning("cmd_start: message.from_user is None")
+        await message.answer("Не удалось определить пользователя. Напишите боту в личные сообщения.")
+        return
+    logger.info("cmd_start: user_id=%s", user_id)
+    try:
+        await get_or_create_user(session, user_id)
+        await message.answer(WELCOME, reply_markup=tz_keyboard(include_detect=True))
+    except Exception as e:
+        logger.exception("cmd_start failed: %s", e)
+        try:
+            await message.answer(
+                "Произошла ошибка при запуске. Попробуйте ещё раз или напишите разработчику."
+            )
+        except Exception:
+            pass
+        raise
+
+
+@router.message(F.text.in_({"Start", "Запустить", "start"}))
+async def cmd_start_button(message: Message, session: AsyncSession):
+    """Handle Start/Запустить button (some clients send text without slash)."""
+    await cmd_start(message, session)
 
 
 @router.message(Command("time"))

@@ -391,6 +391,26 @@ curl -s "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
 
 После того как `curl http://127.0.0.1:8001/health` возвращает `{"status":"ok"}`, обновите страницу в браузере — 502 должна пропасть.
 
+### Кнопка Start в боте не реагирует
+
+Если при нажатии кнопки «Запустить» (Start) в Telegram бот не отвечает:
+
+1. **Убедитесь, что webhook получает обновления.** На сервере смотрите логи приложения в момент нажатия Start:
+   ```bash
+   docker compose logs app -f
+   ```
+   При нажатии Start должна появиться строка вида `Webhook: message from user_id=..., text=/start`. Если таких строк нет — обновления не доходят до приложения (проверьте URL webhook и Nginx).
+
+2. **Проверьте getWebhookInfo:**
+   ```bash
+   curl -s "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getWebhookInfo"
+   ```
+   Должен быть указан ваш HTTPS URL (например `https://me-bobur.uz/webhook`). Если `url` пустой — выполните setWebhook (см. шаг 7).
+
+3. **Если в логах есть «Webhook: message»**, но ответа пользователю нет — смотрите следующую строку лога: при ошибке в обработчике будет «cmd_start failed» или «Webhook processing error». Исправьте причину (часто — ошибка БД или недоступный Redis).
+
+4. **Секретный токен webhook:** если в `.env` задан `WEBHOOK_SECRET`, при setWebhook нужно передать тот же `secret_token`. Иначе Telegram будет отправлять запросы, но сервер вернёт 403 и обновления не обрабатываются.
+
 ### 404 для WebApp и конфликт server_name
 
 При сообщении Nginx «conflicting server name "bot.ваш-домен"» один из двух конфигов с этим `server_name` **игнорируется**. Если в активном конфиге нет `location /webapp`, `location /static/`, `location /api/`, то запросы к ним отдают 404.
