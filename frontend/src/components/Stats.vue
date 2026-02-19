@@ -2,7 +2,7 @@
   <el-card class="section-card">
     <template #header>
       <div class="card-header">
-        <span class="card-header-icon">📊</span>
+        <el-icon class="card-header-icon"><DataAnalysis /></el-icon>
         <span>Статистика</span>
       </div>
     </template>
@@ -24,7 +24,11 @@
       </el-col>
       <el-col :span="8">
         <div class="stat-item">
-          <el-statistic :value="stats.current_streak || 0" title="Стрик" suffix=" 🔥" />
+          <el-statistic :value="stats.current_streak || 0" title="Стрик">
+            <template #suffix>
+              <el-icon class="streak-icon"><TrendCharts /></el-icon>
+            </template>
+          </el-statistic>
         </div>
       </el-col>
     </el-row>
@@ -32,6 +36,8 @@
 </template>
 
 <script setup>
+import { DataAnalysis, TrendCharts } from '@element-plus/icons-vue'
+
 defineProps({
   stats: {
     type: Object,
@@ -60,6 +66,7 @@ defineProps({
 
 .card-header-icon {
   font-size: 20px;
+  color: var(--el-color-primary);
 }
 
 .stats-row {
@@ -70,5 +77,21 @@ defineProps({
   padding: 12px 4px;
   background: var(--el-fill-color-light);
   border-radius: 12px;
+}
+
+.streak-icon {
+  color: var(--el-color-warning);
+  font-size: 16px;
+  margin-left: 2px;
+}
+
+@media (max-width: 768px) {
+  .el-col {
+    margin-bottom: 8px;
+  }
+  
+  .stat-item {
+    padding: 10px 2px;
+  }
 }
 </style>

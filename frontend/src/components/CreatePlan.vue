@@ -2,7 +2,7 @@
   <el-card class="section-card">
     <template #header>
       <div class="card-header">
-        <span class="card-header-icon">✏️</span>
+        <el-icon class="card-header-icon"><EditPen /></el-icon>
         <span>Создать план на сегодня</span>
       </div>
     </template>
@@ -29,7 +29,8 @@
         :loading="saving"
         style="width: 100%; margin-top: 8px;"
       >
-        💾 Сохранить план
+        <el-icon><Check /></el-icon>
+        <span>Сохранить план</span>
       </el-button>
     </el-form>
   </el-card>
@@ -38,6 +39,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
+import { EditPen, Check } from '@element-plus/icons-vue'
 import { useApi } from '@/composables/useApi'
 
 const emit = defineEmits(['saved'])
@@ -88,6 +90,7 @@ async function savePlan() {
 
 .card-header-icon {
   font-size: 20px;
+  color: var(--el-color-primary);
 }
 
 .task-preview {

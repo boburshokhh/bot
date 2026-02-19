@@ -2,24 +2,57 @@
   <el-config-provider :locale="ruLocale" :dark="isDark">
     <div class="app-container">
       <div class="container">
-        <TodayPlan
-          :tasks="today.tasks"
-          :plan-date="today.date"
-          :loading="loading.today"
-          @refresh="loadToday"
-        />
+        <el-card class="header-card" shadow="never">
+          <div class="app-header">
+            <div class="app-title">
+              <el-icon class="app-icon"><Calendar /></el-icon>
+              <span>Planning Bot</span>
+            </div>
+          </div>
+        </el-card>
 
-        <CreatePlan @saved="handlePlanSaved" />
+        <el-tabs v-model="activeTab" class="main-tabs" @tab-change="handleTabChange">
+          <el-tab-pane label="План" name="plan">
+            <template #label>
+              <span class="tab-label">
+                <el-icon><Document /></el-icon>
+                <span>План</span>
+              </span>
+            </template>
+            <TodayPlan
+              :tasks="today.tasks"
+              :plan-date="today.date"
+              :loading="loading.today"
+              @refresh="loadToday"
+            />
+            <CreatePlan @saved="handlePlanSaved" />
+          </el-tab-pane>
 
-        <Settings
-          :settings="settings"
-          :loading="loading.settings"
-          @saved="loadSettings"
-        />
+          <el-tab-pane label="Статистика" name="stats">
+            <template #label>
+              <span class="tab-label">
+                <el-icon><DataAnalysis /></el-icon>
+                <span>Статистика</span>
+              </span>
+            </template>
+            <Stats :stats="stats" :loading="loading.stats" />
+            <History />
+          </el-tab-pane>
 
-        <Stats :stats="stats" :loading="loading.stats" />
-
-        <History />
+          <el-tab-pane label="Настройки" name="settings">
+            <template #label>
+              <span class="tab-label">
+                <el-icon><Setting /></el-icon>
+                <span>Настройки</span>
+              </span>
+            </template>
+            <Settings
+              :settings="settings"
+              :loading="loading.settings"
+              @saved="loadSettings"
+            />
+          </el-tab-pane>
+        </el-tabs>
       </div>
     </div>
   </el-config-provider>
@@ -28,6 +61,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Calendar, Document, DataAnalysis, Setting } from '@element-plus/icons-vue'
 import ru from 'element-plus/es/locale/lang/ru'
 import { useTelegramTheme } from '@/composables/useTelegramTheme'
 import { useWebApp } from '@/composables/useWebApp'
@@ -44,6 +78,8 @@ const { init: initWebApp } = useWebApp()
 const { isDark } = useTelegramTheme()
 const { api } = useApi()
 
+const activeTab = ref('plan')
+
 const loading = reactive({
   today: true,
   settings: true,
@@ -53,6 +89,10 @@ const loading = reactive({
 const today = ref({ tasks: [], date: null, exists: false })
 const settings = ref({})
 const stats = ref({ total_plans: 0, avg_percent: 0, current_streak: 0 })
+
+function handleTabChange(name) {
+  // Можно добавить логику при смене таба
+}
 
 async function loadToday() {
   loading.today = true
@@ -104,11 +144,103 @@ onMounted(async () => {
 <style scoped>
 .app-container {
   min-height: 100vh;
-  padding: 16px;
+  padding: 12px;
+  background: var(--el-bg-color-page);
 }
 
 .container {
   max-width: 600px;
   margin: 0 auto;
+}
+
+.header-card {
+  margin-bottom: 12px;
+  border-radius: 12px;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.app-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.app-icon {
+  font-size: 24px;
+  color: var(--el-color-primary);
+}
+
+.main-tabs {
+  margin-top: 8px;
+}
+
+.main-tabs :deep(.el-tabs__header) {
+  margin-bottom: 16px;
+  background: var(--el-bg-color);
+  border-radius: 12px;
+  padding: 4px;
+}
+
+.main-tabs :deep(.el-tabs__nav-wrap) {
+  padding: 0 8px;
+}
+
+.main-tabs :deep(.el-tabs__item) {
+  padding: 12px 16px;
+  border-radius: 8px;
+  transition: all 0.3s;
+}
+
+.main-tabs :deep(.el-tabs__item.is-active) {
+  background: var(--el-color-primary-light-9);
+  color: var(--el-color-primary);
+}
+
+.tab-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tab-label .el-icon {
+  font-size: 16px;
+}
+
+/* Адаптивность для мобильных */
+@media (max-width: 768px) {
+  .app-container {
+    padding: 8px;
+  }
+
+  .app-title {
+    font-size: 16px;
+  }
+
+  .main-tabs :deep(.el-tabs__item) {
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+
+  .tab-label span {
+    display: none;
+  }
+
+  .tab-label .el-icon {
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 480px) {
+  .container {
+    max-width: 100%;
+  }
 }
 </style>

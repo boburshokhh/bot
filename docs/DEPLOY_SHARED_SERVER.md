@@ -339,11 +339,57 @@ curl -s "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"
 | Проблема | Что проверить |
 |----------|----------------|
 | Порт уже занят | `ss -tlnp`; сменить порт на хосте в compose и в Nginx `proxy_pass`. |
-| 502 Bad Gateway | Контейнер приложения запущен; порт в `proxy_pass` совпадает с портом приложения; `curl http://127.0.0.1:APP_PORT/health` отвечает. |
+| 502 Bad Gateway | См. ниже раздел «502 Bad Gateway». |
 | Webhook не приходят | В `getWebhookInfo` указан HTTPS URL; Nginx проксирует `/webhook` на приложение; фаервол разрешает 80/443. |
 | 404 для /webapp или «conflicting server name» | См. ниже раздел «404 для WebApp и конфликт server_name». |
 
 Подробнее (фаервол, логи, Celery) — в [DEPLOYMENT_UBUNTU_WEBHOOK.md](DEPLOYMENT_UBUNTU_WEBHOOK.md).
+
+### 502 Bad Gateway
+
+Ошибка означает: Nginx не может подключиться к приложению (upstream). Выполните на сервере по порядку.
+
+1. **Проверить, что контейнер приложения запущен:**
+   ```bash
+   cd /opt/bot   # или ваш каталог проекта
+   docker compose ps
+   ```
+   Сервис `app` должен быть в состоянии `Up`. Если `Exited` или его нет — смотрите логи:
+   ```bash
+   docker compose logs app --tail 100
+   ```
+
+2. **Проверить, отвечает ли приложение на порту хоста:**
+   ```bash
+   curl -s http://127.0.0.1:8001/health
+   ```
+   Ожидается: `{"status":"ok"}`. Если «Connection refused» — приложение не слушает порт 8001 (проверьте `docker compose.yml`: должно быть `"8001:8000"` для сервиса `app`). Если у вас другой порт — замените 8001 в этой команде и в Nginx `proxy_pass`.
+
+3. **Порт в Nginx должен совпадать с портом приложения на хосте.** Откройте конфиг сайта:
+   ```bash
+   sudo grep -r "proxy_pass" /etc/nginx/sites-enabled/
+   ```
+   Для бота должен быть `proxy_pass http://127.0.0.1:8001;` (или тот порт, что в `docker compose ps` у сервиса `app` в колонке портов). Если порт другой — исправьте в конфиге и выполните:
+   ```bash
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+
+4. **Если контейнер падает при старте** — часто причина в сборке образа (например, этап сборки фронтенда). Пересоберите без кэша и посмотрите вывод:
+   ```bash
+   cd /opt/bot
+   docker compose build --no-cache app
+   docker compose up -d app
+   docker compose logs app -f
+   ```
+   При ошибке в `npm run build` или в Python — исправьте по тексту ошибки. После успешного старта `curl http://127.0.0.1:8001/health` должен вернуть `{"status":"ok"}`.
+
+5. **Проверить логи Nginx** (причина 502 иногда пишется в error.log):
+   ```bash
+   sudo tail -50 /var/log/nginx/error.log
+   ```
+   Типичные сообщения: `connect() failed (111: Connection refused)` — приложение не запущено или слушает другой порт; `upstream timed out` — приложение зависло или не успевает ответить.
+
+После того как `curl http://127.0.0.1:8001/health` возвращает `{"status":"ok"}`, обновите страницу в браузере — 502 должна пропасть.
 
 ### 404 для WebApp и конфликт server_name
 

@@ -2,7 +2,7 @@
   <el-card class="section-card">
     <template #header>
       <div class="card-header">
-        <span class="card-header-icon">📅</span>
+        <el-icon class="card-header-icon"><Calendar /></el-icon>
         <span>История</span>
       </div>
     </template>
@@ -16,7 +16,10 @@
         placeholder="Выберите месяц"
         style="flex: 1;"
       />
-      <el-button :loading="loading" @click="loadHistory">Загрузить</el-button>
+      <el-button :loading="loading" @click="loadHistory" type="primary">
+        <el-icon><Search /></el-icon>
+        <span class="btn-text">Загрузить</span>
+      </el-button>
     </div>
 
     <div v-if="loading" style="margin-top: 16px;">
@@ -30,7 +33,7 @@
       style="margin-top: 16px;"
     >
       <template #image>
-        <span style="font-size: 40px;">📭</span>
+        <el-icon class="empty-icon"><DocumentDelete /></el-icon>
       </template>
     </el-empty>
 
@@ -65,6 +68,7 @@
 <script setup>
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Calendar, Search, DocumentDelete } from '@element-plus/icons-vue'
 import { useApi } from '@/composables/useApi'
 import { formatDate } from '@/utils/formatters'
 
@@ -121,12 +125,22 @@ loadHistory()
 
 .card-header-icon {
   font-size: 20px;
+  color: var(--el-color-primary);
 }
 
 .month-picker-row {
   display: flex;
   gap: 8px;
   align-items: center;
+}
+
+.btn-text {
+  margin-left: 4px;
+}
+
+.empty-icon {
+  font-size: 40px;
+  color: var(--el-text-color-placeholder);
 }
 
 .history-list {
@@ -140,6 +154,12 @@ loadHistory()
   padding: 12px;
   background: var(--el-fill-color-light);
   border-radius: 10px;
+  transition: all 0.2s;
+}
+
+.history-item:hover {
+  background: var(--el-fill-color);
+  transform: translateY(-1px);
 }
 
 .history-info {
@@ -147,10 +167,31 @@ loadHistory()
   justify-content: space-between;
   align-items: center;
   margin-bottom: 4px;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .history-date {
   font-weight: 500;
   font-size: 14px;
+}
+
+@media (max-width: 480px) {
+  .btn-text {
+    display: none;
+  }
+  
+  .month-picker-row {
+    flex-direction: column;
+  }
+  
+  .month-picker-row .el-button {
+    width: 100%;
+  }
+  
+  .history-info {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 </style>

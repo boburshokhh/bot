@@ -2,7 +2,7 @@
   <el-card class="section-card">
     <template #header>
       <div class="card-header">
-        <span class="card-header-icon">⚙️</span>
+        <el-icon class="card-header-icon"><Setting /></el-icon>
         <span>Настройки</span>
       </div>
     </template>
@@ -35,7 +35,11 @@
             <el-input
               v-model="form.morning_time"
               placeholder="07:00"
-            />
+            >
+              <template #prefix>
+                <el-icon><Sunny /></el-icon>
+              </template>
+            </el-input>
           </el-form-item>
         </el-col>
         <el-col :span="12">
@@ -43,7 +47,11 @@
             <el-input
               v-model="form.evening_time"
               placeholder="21:00"
-            />
+            >
+              <template #prefix>
+                <el-icon><Moon /></el-icon>
+              </template>
+            </el-input>
           </el-form-item>
         </el-col>
       </el-row>
@@ -79,7 +87,8 @@
         :loading="saving"
         style="width: 100%;"
       >
-        💾 Сохранить настройки
+        <el-icon><Check /></el-icon>
+        <span>Сохранить настройки</span>
       </el-button>
     </el-form>
   </el-card>
@@ -88,7 +97,7 @@
 <script setup>
 import { ref, reactive, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Clock } from '@element-plus/icons-vue'
+import { Setting, Clock, Sunny, Moon, Check } from '@element-plus/icons-vue'
 import { useApi } from '@/composables/useApi'
 
 const props = defineProps({
@@ -165,5 +174,12 @@ async function saveSettings() {
 
 .card-header-icon {
   font-size: 20px;
+  color: var(--el-color-primary);
+}
+
+@media (max-width: 768px) {
+  .el-col {
+    margin-bottom: 8px;
+  }
 }
 </style>

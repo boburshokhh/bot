@@ -2,14 +2,14 @@
   <el-card class="section-card">
     <template #header>
       <div class="card-header">
-        <span class="card-header-icon">📋</span>
+        <el-icon class="card-header-icon"><Document /></el-icon>
         <span>Сегодня</span>
         <el-button
           size="small"
           circle
           :loading="loading"
           @click="$emit('refresh')"
-          style="margin-left: auto;"
+          class="refresh-btn"
         >
           <el-icon><Refresh /></el-icon>
         </el-button>
@@ -26,7 +26,7 @@
       :image-size="80"
     >
       <template #image>
-        <span style="font-size: 48px;">📝</span>
+        <el-icon class="empty-icon"><DocumentAdd /></el-icon>
       </template>
     </el-empty>
 
@@ -47,7 +47,7 @@
 </template>
 
 <script setup>
-import { Refresh } from '@element-plus/icons-vue'
+import { Refresh, Document, DocumentAdd } from '@element-plus/icons-vue'
 import TaskCard from './TaskCard.vue'
 import { formatDate } from '@/utils/formatters'
 
@@ -85,6 +85,16 @@ defineEmits(['refresh'])
 
 .card-header-icon {
   font-size: 20px;
+  color: var(--el-color-primary);
+}
+
+.refresh-btn {
+  margin-left: auto;
+}
+
+.empty-icon {
+  font-size: 48px;
+  color: var(--el-text-color-placeholder);
 }
 
 .loading-container {

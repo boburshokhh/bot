@@ -22,7 +22,8 @@
         :loading="loading === 'done'"
         @click="setStatus('done')"
       >
-        ✅ Выполнено
+        <el-icon><CircleCheck /></el-icon>
+        <span class="btn-text">Выполнено</span>
       </el-button>
       <el-button
         type="warning"
@@ -30,7 +31,8 @@
         :loading="loading === 'partial'"
         @click="setStatus('partial')"
       >
-        ⚠️ Частично
+        <el-icon><Warning /></el-icon>
+        <span class="btn-text">Частично</span>
       </el-button>
       <el-button
         type="danger"
@@ -38,7 +40,8 @@
         :loading="loading === 'failed'"
         @click="setStatus('failed')"
       >
-        ❌ Не выполнено
+        <el-icon><CircleClose /></el-icon>
+        <span class="btn-text">Не выполнено</span>
       </el-button>
     </div>
 
@@ -48,18 +51,24 @@
         :placeholder="`Комментарий к задаче ${task.position + 1}`"
         size="small"
         clearable
-      />
+      >
+        <template #prefix>
+          <el-icon><ChatLineRound /></el-icon>
+        </template>
+      </el-input>
       <el-button
         size="small"
         :loading="savingComment"
         @click="saveComment"
+        type="primary"
       >
-        💬
+        <el-icon><Check /></el-icon>
       </el-button>
     </div>
 
     <div v-if="task.comment" class="task-comment">
-      💬 {{ task.comment }}
+      <el-icon class="comment-icon"><ChatLineRound /></el-icon>
+      <span>{{ task.comment }}</span>
     </div>
   </el-card>
 </template>
@@ -67,6 +76,13 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
+import {
+  CircleCheck,
+  Warning,
+  CircleClose,
+  ChatLineRound,
+  Check,
+} from '@element-plus/icons-vue'
 import { useApi } from '@/composables/useApi'
 import { getStatusLabel, getStatusType } from '@/utils/formatters'
 
@@ -156,6 +172,25 @@ async function saveComment() {
   margin-bottom: 12px;
 }
 
+.task-actions .el-button {
+  flex: 1;
+  min-width: 0;
+}
+
+.btn-text {
+  margin-left: 4px;
+}
+
+@media (max-width: 480px) {
+  .btn-text {
+    display: none;
+  }
+  
+  .task-actions .el-button {
+    flex: 0 0 auto;
+  }
+}
+
 .task-comment-row {
   display: flex;
   gap: 8px;
@@ -169,6 +204,14 @@ async function saveComment() {
   border-radius: 8px;
   font-size: 13px;
   color: var(--el-text-color-secondary);
-  font-style: italic;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.comment-icon {
+  font-size: 14px;
+  color: var(--el-color-primary);
+  flex-shrink: 0;
 }
 </style>
