@@ -1,0 +1,18 @@
+# Копировать в /etc/systemd/system/ и включить:
+#   sudo cp /opt/bot/scripts/telegram-webhook-update.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable telegram-webhook-update.service
+# После перезагрузки сервера или перезапуска ngrok этот сервис один раз обновит webhook.
+[Unit]
+Description=Update Telegram webhook with current ngrok URL
+After=ngrok.service network-online.target
+Wants=ngrok.service
+
+[Service]
+Type=oneshot
+Environment=BOT_DIR=/opt/bot
+ExecStart=/opt/bot/scripts/update-webhook.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

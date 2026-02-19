@@ -47,8 +47,8 @@ async def health():
     return {"status": "ok"}
 
 
-@app.post("/webhook")
-async def webhook(request: Request, response: Response):
+async def _handle_webhook(request: Request) -> JSONResponse | dict:
+    logger.info("Webhook request received")
     settings = Settings()
     if settings.webhook_secret:
         secret_header = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
@@ -63,3 +63,9 @@ async def webhook(request: Request, response: Response):
         logger.exception("Webhook error: %s", e)
         return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
     return {"ok": True}
+
+
+@app.post("/webhook")
+@app.post("/webhook/")
+async def webhook(request: Request):
+    return await _handle_webhook(request)

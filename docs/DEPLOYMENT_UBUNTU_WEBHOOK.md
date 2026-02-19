@@ -614,6 +614,35 @@ curl -s http://127.0.0.1:4040/api/tunnels | grep -o '"public_url":"https://[^"]*
 
 **Важно:** при бесплатном ngrok URL может меняться после перезапуска службы или сервера. Тогда снова возьмите URL (команда выше или 4040) и выполните `setWebhook` с новым URL. Постоянный домен — у платного ngrok или Cloudflare Tunnel.
 
+#### Шаг 6.1. Автообновление webhook при смене URL ngrok
+
+В проекте есть скрипт, который сам получает текущий URL туннеля и обновляет webhook в Telegram.
+
+**Вручную** (после перезагрузки сервера или перезапуска ngrok):
+
+```bash
+sudo chmod +x /opt/bot/scripts/update-webhook.sh
+/opt/bot/scripts/update-webhook.sh
+```
+
+Скрипт читает `TELEGRAM_BOT_TOKEN` из `/opt/bot/.env`, ждёт появления туннеля в API ngrok (до 60 сек) и вызывает `setWebhook`.
+
+**Автоматически после каждой загрузки сервера:**
+
+Служба `telegram-webhook-update` один раз запускается после ngrok и обновляет webhook.
+
+```bash
+sudo cp /opt/bot/scripts/telegram-webhook-update.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable telegram-webhook-update.service
+```
+
+После перезагрузки сервера сначала поднимется ngrok, затем выполнится обновление webhook. Если вы только перезапустили ngrok вручную (`sudo systemctl restart ngrok`), один раз выполните:
+
+```bash
+sudo systemctl start telegram-webhook-update.service
+```
+
 #### Кратко: что делает туннель
 
 | Кто              | Действие |
@@ -661,7 +690,7 @@ curl -s http://127.0.0.1:4040/api/tunnels | grep -o '"public_url":"https://[^"]*
    - Написать боту в Telegram — должен ответить.
    - Логи: `docker compose logs -f app`
 
-После перезагрузки сервера: Docker-контейнеры и служба ngrok поднимутся сами (если включены `enable`). Если URL ngrok изменился — снова выполните шаги 3 и 4.
+После перезагрузки сервера: Docker-контейнеры и служба ngrok поднимутся сами (если включены `enable`). Если URL ngrok изменился — либо снова выполните шаги 3 и 4, либо один раз запустите скрипт обновления webhook: `sudo /opt/bot/scripts/update-webhook.sh` (или включите службу `telegram-webhook-update.service`, см. раздел 8, шаг 6.1).
 
 ### Вариант: бот через long polling (без туннеля)
 
