@@ -286,6 +286,7 @@ def send_morning_reminder(user_id: int, plan_date: str, reminder_attempt: int = 
         payload_sent = {"date": d.isoformat(), "reminder_attempt": reminder_attempt}
         try:
             await bot.send_message(telegram_id, REMINDER_MORNING, reply_markup=morning_reply_keyboard())
+            await set_awaiting_plan(settings.redis_url, settings.telegram_bot_token, telegram_id, d)
         except Exception as e:
             logger.exception("Morning reminder send failed user_id=%s attempt=%s: %s", user_id, reminder_attempt, e)
             factory2, engine2 = _get_async_session()

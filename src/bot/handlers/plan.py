@@ -72,9 +72,25 @@ async def skip_plan(message: Message, state: FSMContext):
     await message.answer(PLAN_SKIPPED, reply_markup=main_menu_keyboard())
 
 
+@router.message(F.text == "Пропустить сегодня ⏭")
+async def skip_plan_any_state(message: Message, state: FSMContext):
+    """Кнопка работает и вне awaiting_plan (напр. после напоминания)."""
+    await state.clear()
+    await state.set_state(MenuStates.main)
+    await message.answer(PLAN_SKIPPED, reply_markup=main_menu_keyboard())
+
+
 @router.message(PlanStates.awaiting_plan, F.text == "Отправил ✅")
 async def already_sent(message: Message):
-    await message.answer("Пришли план текстом — каждый пункт с новой строки.")
+    await message.answer("Пришли план текстом — каждый пункт с новой строки.", reply_markup=morning_reply_keyboard())
+
+
+@router.message(F.text == "Отправил ✅")
+async def already_sent_any_state(message: Message, state: FSMContext):
+    """Кнопка работает и вне awaiting_plan: входим в режим ввода плана."""
+    await state.set_state(PlanStates.awaiting_plan)
+    await state.update_data(plan_date=date.today().isoformat())
+    await message.answer("Пришли план текстом — каждый пункт с новой строки.", reply_markup=morning_reply_keyboard())
 
 
 @router.message(Command("delete_plan"))
