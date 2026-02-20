@@ -65,6 +65,33 @@ async def _get_morning_reminder_policy(user_id: int) -> tuple[int, int]:
         await engine.dispose()
 
 
+async def _send_error_to_user(user_id: int, notification_type: str, error_text: str) -> None:
+    """Send server error message to user in Telegram on final Celery task failure."""
+    factory, engine = _get_async_session()
+    try:
+        async with factory() as session:
+            r = await session.execute(select(User).where(User.id == user_id))
+            user = r.scalar_one_or_none()
+            if not user or not user.telegram_id:
+                return
+            telegram_id = user.telegram_id
+    finally:
+        await engine.dispose()
+
+    settings = Settings()
+    bot = Bot(token=settings.telegram_bot_token)
+    try:
+        ntype = "утреннее" if notification_type == "morning" else "вечернее"
+        await bot.send_message(
+            telegram_id,
+            f"Не удалось отправить {ntype} напоминание: {error_text}"
+        )
+    except Exception as e:
+        logger.exception("Failed to send error notification to user_id=%s: %s", user_id, e)
+    finally:
+        await bot.session.close()
+
+
 async def _send_morning(user_id: int, plan_date: date, attempt_count: int) -> None:
     settings = Settings()
     factory, engine = _get_async_session()
@@ -196,7 +223,11 @@ def send_morning_prompt(self, user_id: int, plan_date: str, attempt_count: int =
             )
     except Exception as exc:
         countdown = 2 ** (attempt_count + 1) * 60
-        raise self.retry(exc=exc, countdown=countdown)
+        try:
+            self.retry(exc=exc, countdown=countdown)
+        except self.MaxRetriesExceededError:
+            asyncio.run(_send_error_to_user(user_id, "morning", str(exc)))
+            raise
 
 
 @app.task
@@ -260,7 +291,11 @@ def send_evening_prompt(self, user_id: int, plan_date: str, attempt_count: int =
         send_evening_reminder.apply_async(args=[user_id, plan_date], countdown=3600 * 3)
     except Exception as exc:
         countdown = 2 ** (attempt_count + 1) * 60
-        raise self.retry(exc=exc, countdown=countdown)
+        try:
+            self.retry(exc=exc, countdown=countdown)
+        except self.MaxRetriesExceededError:
+            asyncio.run(_send_error_to_user(user_id, "evening", str(exc)))
+            raise
 
 
 @app.task

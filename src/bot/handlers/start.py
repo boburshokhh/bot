@@ -11,12 +11,16 @@ from aiogram.types import Message, ReplyKeyboardRemove
 from sqlalchemy.ext.asyncio import AsyncSession
 import json
 
-from src.bot.keyboards import main_menu_keyboard, tz_keyboard, webapp_keyboard
+from src.bot.keyboards import main_menu_keyboard, tz_keyboard, webapp_keyboard, morning_reply_keyboard, evening_inline_keyboard
 from src.bot.states import MenuStates
-from src.bot.text import COMMANDS_OVERVIEW, TIMEZONE_CHOOSE_PROMPT, WELCOME, format_settings, format_tz_set
+from src.bot.text import (
+    COMMANDS_OVERVIEW, TIMEZONE_CHOOSE_PROMPT, WELCOME, format_settings, format_tz_set,
+    MORNING_PROMPT, TEST_MORNING_SENT, TEST_EVENING_SENT, TEST_DELIVERY_ERROR, format_evening_plan
+)
 from src.bot.user_flow import get_user_or_ask_timezone
 from src.config import Settings
 from src.scheduler.tasks import _get_dispatch_window
+from src.services.plan import get_plan_for_date
 from src.services.user import (
     get_or_create_user,
     get_user_by_telegram_id,
@@ -152,6 +156,69 @@ async def cmd_check_cron(message: Message, session: AsyncSession):
         "в логах worker — «Dispatching morning/evening prompt».",
     ]
     await message.answer("\n".join(lines))
+
+
+@router.message(Command("test_morning"))
+async def cmd_test_morning(message: Message, session: AsyncSession):
+    user = await get_user_by_telegram_id(session, message.from_user.id)
+    if not user:
+        await message.answer("Сначала выбери часовой пояс — напиши /start")
+        return
+
+    try:
+        ZoneInfo(user.timezone)
+    except Exception:
+        await message.answer("Часовой пояс не определён. Используй /timezone для смены.")
+        return
+
+    await message.answer("Отправляю тестовое утреннее сообщение...")
+    try:
+        await message.answer(
+            MORNING_PROMPT,
+            reply_markup=morning_reply_keyboard(),
+        )
+        await message.answer(TEST_MORNING_SENT)
+    except Exception as e:
+        logger.exception("Test morning delivery failed: %s", e)
+        await message.answer(TEST_DELIVERY_ERROR.format(error=str(e)))
+
+
+@router.message(Command("test_evening"))
+async def cmd_test_evening(message: Message, session: AsyncSession):
+    user = await get_user_by_telegram_id(session, message.from_user.id)
+    if not user:
+        await message.answer("Сначала выбери часовой пояс — напиши /start")
+        return
+
+    try:
+        tz = ZoneInfo(user.timezone)
+    except Exception:
+        await message.answer("Часовой пояс не определён. Используй /timezone для смены.")
+        return
+
+    local_now = datetime.now(timezone.utc).astimezone(tz)
+    plan_date = local_now.date()
+    plan = await get_plan_for_date(session, user.id, plan_date)
+
+    await message.answer("Отправляю тестовое вечернее сообщение...")
+    try:
+        if not plan or not plan.tasks:
+            await message.answer("План на сегодня не найден. Создай план утром.")
+        else:
+            tasks_with_status = [
+                (t.text, t.status.status_enum if t.status else None)
+                for t in sorted(plan.tasks, key=lambda x: x.position)
+            ]
+            text = format_evening_plan(plan_date, tasks_with_status)
+            task_ids = [t.id for t in plan.tasks]
+            await message.answer(
+                text,
+                reply_markup=evening_inline_keyboard(task_ids),
+            )
+        await message.answer(TEST_EVENING_SENT)
+    except Exception as e:
+        logger.exception("Test evening delivery failed: %s", e)
+        await message.answer(TEST_DELIVERY_ERROR.format(error=str(e)))
 
 
 @router.message(Command("help"))
