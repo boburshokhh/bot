@@ -1,16 +1,109 @@
 """Celery tasks: send morning/evening prompts with retry."""
 import asyncio
-import logging
-from datetime import date, datetime
+from src.scheduler.custom_reminders_dispatch import dispatch_custom_reminders_async
+
+@app.task
+def dispatch_custom_reminders():
+    """Run every minute to find and dispatch custom reminders."""
+    asyncio.run(dispatch_custom_reminders_async())
+
+@app.task(bind=True, max_retries=3)
+def send_custom_reminder(self, reminder_id: int):
+    """Send a custom reminder to a user and schedule the next iteration."""
+    async def _run():
+        factory, engine = _get_async_session()
+        try:
+            async with factory() as session:
+                r = await session.execute(
+                    select(CustomReminder)
+                    .where(CustomReminder.id == reminder_id)
+                    .options(selectinload(CustomReminder.user))
+                )
+                reminder = r.scalar_one_or_none()
+                
+                if not reminder or not reminder.user or not reminder.enabled:
+                    return
+                
+                user = reminder.user
+                if not user.telegram_id:
+                    return
+                
+                # Send message
+                settings = Settings()
+                bot = Bot(token=settings.telegram_bot_token)
+                try:
+                    from src.bot.keyboards import custom_reminder_inline_keyboard
+                    text = f"🔔 Напоминание:\n\n{reminder.description}"
+                    
+                    await bot.send_message(
+                        user.telegram_id,
+                        text,
+                        reply_markup=custom_reminder_inline_keyboard(reminder.id)
+                    )
+                    
+                    # Update state
+                    now_utc = datetime.now(timezone.utc)
+                    reminder.attempts_sent_today += 1
+                    reminder.last_sent_at_utc = now_utc.replace(tzinfo=None)
+                    
+                    # Calculate next fire time
+                    if reminder.done_today or reminder.attempts_sent_today >= reminder.max_attempts_per_day:
+                        # Schedule for tomorrow
+                        from src.services.reminders import compute_next_daily_fire_utc
+                        # We use local base time + 1 day essentially, compute_next_daily_fire_utc handles it
+                        # if we pass a time that is strictly in the future for today, or if we pass tomorrow
+                        # To be safe, we calculate based on now_utc + 1 hour to ensure we jump to tomorrow
+                        # if we are exactly at the reminder time. Wait, compute_next_daily_fire_utc will return
+                        # tomorrow if the time has passed today. So we just pass now_utc.
+                        # Actually to be 100% sure we move to next day, we can use now + 1 day if it's already "today".
+                        # But wait, compute_next_daily_fire_utc does: if target_local <= local_base, adds 1 day.
+                        # So just passing now_utc is correct.
+                        next_fire, cycle_date = compute_next_daily_fire_utc(
+                            user.timezone, reminder.time_of_day, now_utc
+                        )
+                        reminder.next_fire_at_utc = next_fire
+                        reminder.cycle_local_date = cycle_date
+                        reminder.attempts_sent_today = 0
+                        reminder.done_today = False
+                    else:
+                        # Schedule repeat
+                        reminder.next_fire_at_utc = (now_utc + timedelta(minutes=reminder.repeat_interval_minutes)).replace(tzinfo=None)
+                    
+                    reminder.locked_until_utc = None
+                    await session.commit()
+                except Exception as e:
+                    logger.exception(f"Failed to send custom reminder {reminder_id}: {e}")
+                    # Release lock so it can be retried by the beat or self.retry
+                    reminder.locked_until_utc = None
+                    await session.commit()
+                    raise
+                finally:
+                    await bot.session.close()
+        finally:
+            await engine.dispose()
+            
+    try:
+        asyncio.run(_run())
+    except Exception as exc:
+        if _is_non_retryable_telegram_error(exc):
+            logger.warning(f"Custom reminder non-retryable for reminder_id={reminder_id}: {exc}")
+            # Could send error to user, but skip for now
+            return
+        try:
+            self.retry(exc=exc, countdown=60)
+        except self.MaxRetriesExceededError:
+            pass
+
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from aiogram import Bot
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update, or_
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import selectinload
 
 from src.config import Settings
-from src.db.models import User, Plan, Task, NotificationLog
+from src.db.models import User, Plan, Task, NotificationLog, CustomReminder
 from src.bot.text import MORNING_PROMPT, REMINDER_MORNING, REMINDER_EVENING
 from src.bot.keyboards import morning_reply_keyboard, evening_inline_keyboard
 from src.bot.text import format_evening_plan

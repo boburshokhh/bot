@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time
-from sqlalchemy import BigInteger, Date, ForeignKey, Integer, Text, Time, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, Integer, Text, Time, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -25,6 +25,9 @@ class User(Base):
     plans: Mapped[list["Plan"]] = relationship("Plan", back_populates="user", cascade="all, delete-orphan")
     notification_logs: Mapped[list["NotificationLog"]] = relationship(
         "NotificationLog", back_populates="user", cascade="all, delete-orphan"
+    )
+    custom_reminders: Mapped[list["CustomReminder"]] = relationship(
+        "CustomReminder", back_populates="user", cascade="all, delete-orphan"
     )
 
 
@@ -79,3 +82,33 @@ class NotificationLog(Base):
     created_at: Mapped[datetime] = mapped_column(nullable=False, default=datetime.utcnow)
 
     user: Mapped["User"] = relationship("User", back_populates="notification_logs")
+
+
+class CustomReminder(Base):
+    __tablename__ = "custom_reminder"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    time_of_day: Mapped[time] = mapped_column(Time, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    
+    repeat_interval_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+    max_attempts_per_day: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    
+    # State for the current day
+    cycle_local_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    attempts_sent_today: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    done_today: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    
+    # Scheduling
+    next_fire_at_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True, index=True)
+    last_sent_at_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    
+    # Control & Concurrency
+    locked_until_utc: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    
+    created_at: Mapped[datetime] = mapped_column(nullable=False, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user: Mapped["User"] = relationship("User", back_populates="custom_reminders")

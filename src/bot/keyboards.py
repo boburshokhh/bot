@@ -122,10 +122,8 @@ def _nav_row_reply() -> list[list[KeyboardButton]]:
 def main_menu_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text=BTN_PLAN)],
-            [KeyboardButton(text=BTN_STATS)],
-            [KeyboardButton(text=BTN_SETTINGS)],
-            [KeyboardButton(text=BTN_HELP)],
+            [KeyboardButton(text=BTN_PLAN), KeyboardButton(text=BTN_STATS)],
+            [KeyboardButton(text=BTN_SETTINGS), KeyboardButton(text=BTN_HELP)],
         ],
         resize_keyboard=True,
     )
@@ -188,4 +186,24 @@ def intervals_submenu_keyboard() -> ReplyKeyboardMarkup:
             *_nav_row_reply(),
         ],
         resize_keyboard=True,
+    )
+
+
+def custom_reminder_inline_keyboard(reminder_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Выполнено сегодня", callback_data=f"crem_done_{reminder_id}")],
+            [
+                InlineKeyboardButton(text="🔕 Отключить", callback_data=f"crem_off_{reminder_id}"),
+                InlineKeyboardButton(text="🗑 Удалить", callback_data=f"crem_del_{reminder_id}"),
+            ],
+        ]
+    )
+
+def custom_reminder_off_keyboard(reminder_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔔 Включить", callback_data=f"crem_on_{reminder_id}")],
+            [InlineKeyboardButton(text="🗑 Удалить", callback_data=f"crem_del_{reminder_id}")],
+        ]
     )

@@ -24,3 +24,10 @@ class MenuStates(StatesGroup):
     settings = State()
     settings_notify = State()
     settings_intervals = State()
+
+
+class ReminderStates(StatesGroup):
+    awaiting_time = State()
+    awaiting_description = State()
+    awaiting_interval = State()
+    awaiting_max_attempts = State()

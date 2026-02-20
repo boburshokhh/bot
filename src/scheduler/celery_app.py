@@ -25,5 +25,9 @@ app.conf.update(
             "task": "src.scheduler.tasks.dispatch_daily_notifications",
             "schedule": crontab(minute="*"),
         },
+        "dispatch-custom-reminders": {
+            "task": "src.scheduler.tasks.dispatch_custom_reminders",
+            "schedule": crontab(minute="*"),
+        },
     },
 )
