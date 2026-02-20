@@ -17,7 +17,8 @@ from src.services.evening import (
     PARTIAL,
     FAILED,
 )
-from src.services.plan import get_plan_by_id
+from src.services.plan import get_plan_by_id, get_task_with_plan
+from src.services.user import get_user_by_telegram_id
 
 router = Router()
 
@@ -39,25 +40,30 @@ def _task_id_from_callback(callback_data: str) -> int | None:
         return None
 
 
-@router.callback_query(F.data.startswith("task_done_"), PlanStates.awaiting_confirmation)
-@router.callback_query(F.data.startswith("task_partial_"), PlanStates.awaiting_confirmation)
-@router.callback_query(F.data.startswith("task_failed_"), PlanStates.awaiting_confirmation)
+@router.callback_query(F.data.startswith("task_done_"))
+@router.callback_query(F.data.startswith("task_partial_"))
+@router.callback_query(F.data.startswith("task_failed_"))
 async def set_status_callback(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     status = _task_status_from_callback(callback.data or "")
     task_id = _task_id_from_callback(callback.data or "")
     if not status or task_id is None:
         await callback.answer("Ошибка")
         return
+    telegram_id = callback.from_user.id if callback.from_user else None
+    if not telegram_id:
+        await callback.answer("Ошибка")
+        return
+    user = await get_user_by_telegram_id(session, telegram_id)
+    task = await get_task_with_plan(session, task_id)
+    if not user or not task or not task.plan or task.plan.user_id != user.id:
+        await callback.answer("Ошибка доступа")
+        return
+    plan_id = task.plan_id
+    plan_date = task.plan.date
+    await state.set_state(PlanStates.awaiting_confirmation)
+    await state.set_data({"plan_id": plan_id, "plan_date": plan_date.isoformat()})
     await set_task_status(session, task_id, status, comment=None)
     await callback.answer("Сохранено")
-    data = await state.get_data()
-    plan_id = data.get("plan_id")
-    plan_date = data.get("plan_date") or date.today()
-    if isinstance(plan_date, str):
-        from datetime import datetime as dt
-        plan_date = dt.strptime(plan_date, "%Y-%m-%d").date()
-    if not plan_id:
-        return
     plan = await get_plan_by_id(session, plan_id)
     if not plan:
         return
@@ -75,12 +81,25 @@ async def set_status_callback(callback: CallbackQuery, session: AsyncSession, st
         await callback.message.edit_text(text, reply_markup=evening_inline_keyboard([t.id for t in plan.tasks]))
 
 
-@router.callback_query(F.data.startswith("task_comment_"), PlanStates.awaiting_confirmation)
-async def ask_comment_callback(callback: CallbackQuery, state: FSMContext):
+@router.callback_query(F.data.startswith("task_comment_"))
+async def ask_comment_callback(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     task_id = _task_id_from_callback(callback.data or "")
     if task_id is None:
         await callback.answer("Ошибка")
         return
+    telegram_id = callback.from_user.id if callback.from_user else None
+    if not telegram_id:
+        await callback.answer("Ошибка")
+        return
+    user = await get_user_by_telegram_id(session, telegram_id)
+    task = await get_task_with_plan(session, task_id)
+    if not user or not task or not task.plan or task.plan.user_id != user.id:
+        await callback.answer("Ошибка доступа")
+        return
+    plan_id = task.plan_id
+    plan_date = task.plan.date
+    await state.set_state(PlanStates.awaiting_confirmation)
+    await state.set_data({"plan_id": plan_id, "plan_date": plan_date.isoformat()})
     await state.update_data(comment_task_id=task_id)
     await state.set_state(PlanStates.awaiting_comment)
     await callback.answer()

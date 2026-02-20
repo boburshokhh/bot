@@ -62,6 +62,14 @@ async def get_plan_by_id(session: AsyncSession, plan_id: int) -> Plan | None:
     return r.scalar_one_or_none()
 
 
+async def get_task_with_plan(session: AsyncSession, task_id: int) -> Task | None:
+    """Load task with plan (plan has id, date, user_id). For access check and plan context."""
+    r = await session.execute(
+        select(Task).where(Task.id == task_id).options(selectinload(Task.plan))
+    )
+    return r.scalar_one_or_none()
+
+
 async def delete_plan(
     session: AsyncSession,
     user_id: int,
