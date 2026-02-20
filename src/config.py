@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     # App
     log_level: str = "INFO"
 
+    # Scheduler: how many minutes after target time we still dispatch notifications.
+    # Increase this if celery_beat occasionally drifts or misses a tick.
+    dispatch_window_minutes: int = 10
+
     @property
     def database_url_sync(self) -> str:
         """Synchronous URL for Alembic (replace asyncpg with psycopg2)."""

@@ -13,9 +13,10 @@ import json
 
 from src.bot.keyboards import main_menu_keyboard, tz_keyboard, webapp_keyboard
 from src.bot.states import MenuStates
-from src.bot.text import COMMANDS_OVERVIEW, TIMEZONE_CHOOSE_PROMPT, WELCOME, TZ_SET, format_settings
+from src.bot.text import COMMANDS_OVERVIEW, TIMEZONE_CHOOSE_PROMPT, WELCOME, format_settings, format_tz_set
 from src.bot.user_flow import get_user_or_ask_timezone
 from src.config import Settings
+from src.scheduler.tasks import _get_dispatch_window
 from src.services.user import (
     get_or_create_user,
     get_user_by_telegram_id,
@@ -108,6 +109,48 @@ async def cmd_time(message: Message, session: AsyncSession):
             lines.append(f"Уведомления: утро {user.notify_morning_time.strftime('%H:%M')}, вечер {user.notify_evening_time.strftime('%H:%M')}")
         except Exception:
             lines.append("(часовой пояс не определён)")
+    await message.answer("\n".join(lines))
+
+
+@router.message(Command("check_cron"))
+async def cmd_check_cron(message: Message, session: AsyncSession):
+    """Show how many minutes until next morning/evening notification and confirm settings are saved."""
+    user = await get_user_by_telegram_id(session, message.from_user.id)
+    if not user:
+        await message.answer("Сначала выбери часовой пояс — напиши /start")
+        return
+
+    try:
+        tz = ZoneInfo(user.timezone)
+    except Exception:
+        await message.answer("Часовой пояс не определён. Используй /timezone для смены.")
+        return
+
+    utc_now = datetime.now(timezone.utc)
+    local_now = utc_now.astimezone(tz)
+    now_m = local_now.hour * 60 + local_now.minute
+    window = _get_dispatch_window()
+
+    def _minutes_until(target_time) -> int:
+        target_m = target_time.hour * 60 + target_time.minute
+        diff = (target_m - now_m) % 1440
+        return diff
+
+    lines = [
+        f"Сейчас твоё время: {local_now.strftime('%H:%M')} ({user.timezone})",
+        f"Время сервера (UTC): {utc_now.strftime('%H:%M:%S')}",
+        "",
+        f"Утреннее уведомление: {user.notify_morning_time.strftime('%H:%M')} — через {_minutes_until(user.notify_morning_time)} мин",
+        f"Вечернее уведомление: {user.notify_evening_time.strftime('%H:%M')} — через {_minutes_until(user.notify_evening_time)} мин",
+        f"Интервал повторов: каждые {user.morning_reminder_interval_minutes} мин, макс {user.morning_reminder_max_attempts} раз",
+        f"Окно отправки (DISPATCH_WINDOW_MINUTES): {window} мин",
+        "",
+        "Если уведомления не приходят — проверь на сервере:",
+        "  docker compose logs celery_beat --tail=20",
+        "  docker compose logs celery_worker --tail=30",
+        "В логах beat должны быть строки «dispatch_daily_notifications»,",
+        "в логах worker — «Dispatching morning/evening prompt».",
+    ]
     await message.answer("\n".join(lines))
 
 
@@ -226,7 +269,7 @@ async def set_timezone(message: Message, session: AsyncSession, state: FSMContex
         user = await get_or_create_user(session, message.from_user.id, timezone=tz)
     else:
         await update_user_timezone(session, user.id, tz)
-    await message.answer(TZ_SET, reply_markup=ReplyKeyboardRemove())
+    await message.answer(format_tz_set(user.notify_morning_time), reply_markup=ReplyKeyboardRemove())
     await state.set_state(MenuStates.main)
     await message.answer("Выберите раздел:", reply_markup=main_menu_keyboard())
     webapp_url = _build_webapp_url()

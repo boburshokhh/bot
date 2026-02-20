@@ -106,9 +106,9 @@ async def action_today_plan(message: Message, session: AsyncSession):
 
 
 @router.message(MenuStates.plan, F.text == BTN_DELETE_PLAN)
-async def action_delete_plan(message: Message, session: AsyncSession):
+async def action_delete_plan(message: Message, session: AsyncSession, state: FSMContext):
     from src.bot.handlers.plan import cmd_delete_plan
-    await cmd_delete_plan(message, session)
+    await cmd_delete_plan(message, session, state)
 
 
 @router.message(MenuStates.plan, F.text == BTN_HISTORY)
