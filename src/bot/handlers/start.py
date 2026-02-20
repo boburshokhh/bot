@@ -8,6 +8,7 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, ReplyKeyboardRemove
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 import json
 
@@ -19,7 +20,9 @@ from src.bot.text import (
 )
 from src.bot.user_flow import get_user_or_ask_timezone
 from src.config import Settings
-from src.scheduler.tasks import _get_dispatch_window
+from src.db.models import NotificationLog
+from src.scheduler.tasks import _get_dispatch_window, send_evening_prompt, send_morning_prompt
+from src.services.notifications import TYPE_EVENING, TYPE_MORNING, STATUS_SENT
 from src.services.plan import get_plan_for_date
 from src.services.user import (
     get_or_create_user,
@@ -246,6 +249,58 @@ async def cmd_test_evening(message: Message, session: AsyncSession):
     except Exception as e:
         logger.exception("Test evening delivery failed: %s", e)
         await message.answer(TEST_DELIVERY_ERROR.format(error=str(e)))
+
+
+@router.message(Command("retry_evening"))
+async def cmd_retry_evening(message: Message, session: AsyncSession):
+    """Снять блокировку «уже отправлено» за сегодня и отправить вечернее уведомление сейчас (без ручного DELETE в БД)."""
+    user = await get_user_by_telegram_id(session, message.from_user.id)
+    if not user:
+        await message.answer("Сначала выбери часовой пояс — напиши /start")
+        return
+    try:
+        tz = ZoneInfo(user.timezone)
+    except Exception:
+        await message.answer("Часовой пояс не определён. Используй /timezone для смены.")
+        return
+    user_today = datetime.now(timezone.utc).astimezone(tz).date()
+    await session.execute(
+        delete(NotificationLog).where(
+            NotificationLog.user_id == user.id,
+            NotificationLog.type == TYPE_EVENING,
+            NotificationLog.status == STATUS_SENT,
+            NotificationLog.payload["date"].astext == user_today.isoformat(),
+        )
+    )
+    await session.commit()
+    send_evening_prompt.delay(user.id, user_today.isoformat(), 0)
+    await message.answer("Задача отправки вечернего уведомления поставлена в очередь. Сообщение придёт в течение минуты.")
+
+
+@router.message(Command("retry_morning"))
+async def cmd_retry_morning(message: Message, session: AsyncSession):
+    """Снять блокировку «уже отправлено» за сегодня и отправить утреннее уведомление сейчас (без ручного DELETE в БД)."""
+    user = await get_user_by_telegram_id(session, message.from_user.id)
+    if not user:
+        await message.answer("Сначала выбери часовой пояс — напиши /start")
+        return
+    try:
+        tz = ZoneInfo(user.timezone)
+    except Exception:
+        await message.answer("Часовой пояс не определён. Используй /timezone для смены.")
+        return
+    user_today = datetime.now(timezone.utc).astimezone(tz).date()
+    await session.execute(
+        delete(NotificationLog).where(
+            NotificationLog.user_id == user.id,
+            NotificationLog.type == TYPE_MORNING,
+            NotificationLog.status == STATUS_SENT,
+            NotificationLog.payload["date"].astext == user_today.isoformat(),
+        )
+    )
+    await session.commit()
+    send_morning_prompt.delay(user.id, user_today.isoformat(), 0)
+    await message.answer("Задача отправки утреннего уведомления поставлена в очередь. Сообщение придёт в течение минуты.")
 
 
 @router.message(Command("help"))
