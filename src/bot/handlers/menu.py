@@ -1,11 +1,13 @@
 """Reply keyboard menu navigation after timezone selection."""
 
-from datetime import time
+from datetime import datetime, time, timezone
 import re
+from zoneinfo import ZoneInfo
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.bot.keyboards import (
@@ -16,6 +18,7 @@ from src.bot.keyboards import (
     BTN_NAV_MAIN,
     BTN_PLAN,
     BTN_PLAN_ADD,
+    BTN_RESET_NOTIFICATIONS,
     BTN_SETTINGS,
     BTN_SETTINGS_INTERVALS,
     BTN_SETTINGS_NOTIFY,
@@ -38,6 +41,9 @@ from src.bot.keyboards import (
 from src.bot.text import COMMANDS_OVERVIEW, TIMEZONE_CHOOSE_PROMPT
 from src.bot.states import MenuStates, SettingsStates
 from src.bot.user_flow import get_user_or_ask_timezone
+from src.db.models import NotificationLog
+from src.scheduler.tasks import send_evening_prompt, send_morning_prompt
+from src.services.notifications import TYPE_EVENING, TYPE_MORNING, STATUS_SENT
 from src.services.user import (
     update_morning_reminder_settings,
     update_notify_times,
@@ -171,6 +177,36 @@ async def menu_settings_intervals(message: Message, state: FSMContext):
     )
 
 
+@router.message(MenuStates.settings, F.text == BTN_RESET_NOTIFICATIONS)
+async def action_reset_notifications(message: Message, session: AsyncSession):
+    """Сбросить записи «уже отправлено» за сегодня и поставить в очередь утреннее и вечернее — для теста."""
+    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
+    if not user:
+        return
+    try:
+        tz = ZoneInfo(user.timezone)
+    except Exception:
+        await message.answer("Часовой пояс не определён. Используй /timezone для смены.")
+        return
+    user_today = datetime.now(timezone.utc).astimezone(tz).date()
+    today_iso = user_today.isoformat()
+    for ntype in (TYPE_MORNING, TYPE_EVENING):
+        await session.execute(
+            delete(NotificationLog).where(
+                NotificationLog.user_id == user.id,
+                NotificationLog.type == ntype,
+                NotificationLog.status == STATUS_SENT,
+                NotificationLog.payload["date"].astext == today_iso,
+            )
+        )
+    await session.commit()
+    send_morning_prompt.delay(user.id, today_iso, 0)
+    send_evening_prompt.delay(user.id, today_iso, 0)
+    await message.answer(
+        "Сбросил записи об отправке за сегодня. Утреннее и вечернее уведомления поставлены в очередь — придут в течение минуты."
+    )
+
+
 # --- Settings notify submenu (MenuStates.settings_notify) ---
 @router.message(MenuStates.settings_notify, F.text == BTN_NAV_BACK)
 @router.message(MenuStates.settings_notify, F.text == BTN_NAV_MAIN)
@@ -212,7 +248,8 @@ async def action_settings_set_attempts(message: Message, state: FSMContext):
 
 
 # --- Settings value handlers (after prompting for input) ---
-@router.message(SettingsStates.awaiting_morning_time, F.text)
+# Не перехватываем команды (/) — пусть обрабатывают start/stats/plan и т.д.
+@router.message(SettingsStates.awaiting_morning_time, F.text, ~F.text.startswith("/"))
 async def receive_morning_time(message: Message, session: AsyncSession, state: FSMContext):
     t = _parse_hhmm((message.text or "").strip())
     if not t:
@@ -231,7 +268,7 @@ async def receive_morning_time(message: Message, session: AsyncSession, state: F
     )
 
 
-@router.message(SettingsStates.awaiting_evening_time, F.text)
+@router.message(SettingsStates.awaiting_evening_time, F.text, ~F.text.startswith("/"))
 async def receive_evening_time(message: Message, session: AsyncSession, state: FSMContext):
     t = _parse_hhmm((message.text or "").strip())
     if not t:
@@ -250,7 +287,7 @@ async def receive_evening_time(message: Message, session: AsyncSession, state: F
     )
 
 
-@router.message(SettingsStates.awaiting_interval_minutes, F.text)
+@router.message(SettingsStates.awaiting_interval_minutes, F.text, ~F.text.startswith("/"))
 async def receive_interval_minutes(message: Message, session: AsyncSession, state: FSMContext):
     value = (message.text or "").strip()
     if not value.isdigit():
@@ -273,7 +310,7 @@ async def receive_interval_minutes(message: Message, session: AsyncSession, stat
     )
 
 
-@router.message(SettingsStates.awaiting_max_attempts, F.text)
+@router.message(SettingsStates.awaiting_max_attempts, F.text, ~F.text.startswith("/"))
 async def receive_max_attempts(message: Message, session: AsyncSession, state: FSMContext):
     value = (message.text or "").strip()
     if not value.isdigit():

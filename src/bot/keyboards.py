@@ -107,6 +107,7 @@ BTN_SET_MORNING = "🌅 Настроить утреннее время"
 BTN_SET_EVENING = "🌆 Настроить вечернее время"
 BTN_SET_INTERVAL = "⏱️ Настроить интервал"
 BTN_SET_ATTEMPTS = "🔢 Настроить максимум попыток"
+BTN_RESET_NOTIFICATIONS = "🔄 Сбросить отправки за сегодня"
 
 
 def _nav_row_reply() -> list[list[KeyboardButton]]:
@@ -159,6 +160,7 @@ def settings_submenu_keyboard() -> ReplyKeyboardMarkup:
             [KeyboardButton(text=BTN_SETTINGS_TZ)],
             [KeyboardButton(text=BTN_SETTINGS_NOTIFY)],
             [KeyboardButton(text=BTN_SETTINGS_INTERVALS)],
+            [KeyboardButton(text=BTN_RESET_NOTIFICATIONS)],
             *_nav_row_reply(),
         ],
         resize_keyboard=True,
