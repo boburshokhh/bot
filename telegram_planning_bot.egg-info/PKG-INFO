@@ -15,6 +15,7 @@ Requires-Dist: celery[redis]>=5.4.0
 Requires-Dist: redis>=5.2.0
 Requires-Dist: pydantic-settings>=2.6.0
 Requires-Dist: python-dotenv>=1.0.0
+Requires-Dist: tzdata>=2024.1
 Provides-Extra: dev
 Requires-Dist: pytest>=8.3.0; extra == "dev"
 Requires-Dist: pytest-asyncio>=0.24.0; extra == "dev"
@@ -29,12 +30,16 @@ Requires-Dist: httpx>=0.28.0; extra == "dev"
 - **/start** — регистрация и выбор часового пояса
 - Ежедневное утреннее уведомление с запросом плана
 - Приём плана (многострочный список задач)
+- Ручное добавление плана в любое время: **/plan** (если плана на сегодня ещё нет)
 - Вечернее уведомление с inline-кнопками: ✅ Выполнено / ⚠ Частично / ❌ Не выполнено, опционально комментарий
 - История и статистика: **/today**, **/history YYYY-MM**, **/stats**
+- Настройка времени и политики повторных утренних напоминаний (интервал и лимит)
+- Telegram WebApp для управления задачами, настройками, историей и статистикой
 
 ## Стек
 
-- Python 3.11, aiogram 3, FastAPI (webhook), Celery + Redis, PostgreSQL, Alembic
+- **Backend:** Python 3.11, aiogram 3, FastAPI (webhook), Celery + Redis, PostgreSQL, Alembic
+- **Frontend (WebApp):** Vue.js 3 + Element Plus + Vite, автотема Telegram (light/dark)
 
 ## Локальный запуск (Docker)
 
@@ -74,9 +79,18 @@ Requires-Dist: httpx>=0.28.0; extra == "dev"
 ## Команды бота
 
 - **/start** — приветствие и выбор часового пояса
+- **/plan** — открыть ввод плана на сегодня вручную (если плана ещё нет)
 - **/today** — план на сегодня и процент выполнения
 - **/history YYYY-MM** — список планов за месяц (например `/history 2025-01`)
 - **/stats** — всего планов, средний % выполнения, текущий стрик (дней подряд 100%)
+- **/settings** — показать текущие настройки пользователя
+- **/timezone** — сменить часовой пояс
+- **/set_morning HH:MM** — изменить время утреннего уведомления
+- **/set_evening HH:MM** — изменить время вечернего уведомления
+- **/set_interval MIN** — изменить интервал повторных утренних напоминаний (в минутах)
+- **/set_attempts N** — изменить максимум повторных утренних напоминаний
+- **/webapp** — открыть веб-панель управления внутри Telegram
+- **/help** или **/commands** — показать список доступных команд
 
 ## Примеры сообщений
 
@@ -104,7 +118,36 @@ Requires-Dist: httpx>=0.28.0; extra == "dev"
    curl -X POST "https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://YOUR_DOMAIN/webhook"
    ```
 
-Рекомендуется держать за Nginx/HTTPS и проксировать `POST /webhook` на контейнер `app:8000`.
+Рекомендуется держать за Nginx/HTTPS и проксировать `POST /webhook` на контейнер `app:8000`. Для работы WebApp нужно проксировать также `/webapp`, `/static` и `/api` — см. детали в гайдах по развёртыванию.
+
+**Подробный гайд:** пошаговый деплой на Ubuntu (в том числе второй/параллельный сервер) и настройка webhook — [docs/DEPLOYMENT_UBUNTU_WEBHOOK.md](docs/DEPLOYMENT_UBUNTU_WEBHOOK.md).  
+**Настройка домена под сервер:** DNS, Nginx, HTTPS, webhook — [docs/DOMAIN_SETUP.md](docs/DOMAIN_SETUP.md).
+
+## Разработка фронтенда (WebApp)
+
+Фронтенд находится в директории `frontend/` и использует Vue.js 3 + Element Plus + Vite.
+
+### Установка и разработка
+
+```bash
+cd frontend
+npm install
+npm run dev      # dev-сервер с HMR на localhost:5173
+npm run build    # сборка в static/dist/
+```
+
+> **Примечание:** В режиме `npm run dev` API-запросы проксируются на `http://localhost:8000` (настроено в `vite.config.js`).
+
+### Сборка перед деплоем
+
+```bash
+cd frontend
+npm run build
+```
+
+Собранные файлы попадают в `static/dist/` и автоматически отдаются FastAPI при открытии `/webapp`.
+
+При Docker-сборке (`docker compose up -d --build`) фронтенд собирается автоматически на этапе multi-stage сборки образа — отдельно запускать `npm run build` не нужно.
 
 ## Разработка
 

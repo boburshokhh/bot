@@ -27,6 +27,14 @@ from src.scheduler.fsm_helper import set_awaiting_plan, set_awaiting_confirmatio
 
 logger = logging.getLogger(__name__)
 
+BOTS_CANT_SEND_TO_BOTS = "bots can't send messages to bots"
+
+
+def _is_non_retryable_telegram_error(exc: BaseException) -> bool:
+    """True if Telegram error should not be retried (e.g. Forbidden: bots can't send to bots)."""
+    msg = str(exc).strip()
+    return BOTS_CANT_SEND_TO_BOTS in msg or "Forbidden:" in msg and "bot" in msg.lower()
+
 
 def _get_async_session():
     settings = Settings()
@@ -126,7 +134,11 @@ async def _send_morning(user_id: int, plan_date: date, attempt_count: int) -> No
         factory2, engine2 = _get_async_session()
         async with factory2() as session:
             await log_notification(
-                session, user_id, TYPE_MORNING, STATUS_RETRIED if attempt_count > 0 else STATUS_FAILED, {"error": str(e), "attempt": attempt_count}
+                session,
+                user_id,
+                TYPE_MORNING,
+                STATUS_RETRIED if attempt_count > 0 else STATUS_FAILED,
+                {"date": plan_date.isoformat(), "error": str(e), "attempt": attempt_count},
             )
             await session.commit()
         await engine2.dispose()
@@ -195,7 +207,11 @@ async def _send_evening(user_id: int, plan_date: date, attempt_count: int) -> No
         factory2, engine2 = _get_async_session()
         async with factory2() as session:
             await log_notification(
-                session, user_id, TYPE_EVENING, STATUS_RETRIED if attempt_count > 0 else STATUS_FAILED, {"error": str(e), "date": plan_date.isoformat()}
+                session,
+                user_id,
+                TYPE_EVENING,
+                STATUS_RETRIED if attempt_count > 0 else STATUS_FAILED,
+                {"date": plan_date.isoformat(), "error": str(e), "attempt": attempt_count},
             )
             await session.commit()
         await engine2.dispose()
@@ -205,11 +221,12 @@ async def _send_evening(user_id: int, plan_date: date, attempt_count: int) -> No
 
 
 @app.task(bind=True, max_retries=3)
-def send_morning_prompt(self, user_id: int, plan_date: str, attempt_count: int = 0):
-    """Send morning plan request. plan_date is ISO (YYYY-MM-DD)."""
+def send_morning_prompt(self, user_id: int, plan_date: str, _attempt_count: int = 0):
+    """Send morning plan request. plan_date is ISO (YYYY-MM-DD). Attempt number from self.request.retries."""
     d = date.fromisoformat(plan_date)
+    attempt = self.request.retries
     try:
-        asyncio.run(_send_morning(user_id, d, attempt_count))
+        asyncio.run(_send_morning(user_id, d, attempt))
         interval_minutes, max_attempts = asyncio.run(_get_morning_reminder_policy(user_id))
         countdown = compute_next_morning_reminder_countdown(
             interval_minutes=interval_minutes,
@@ -222,7 +239,11 @@ def send_morning_prompt(self, user_id: int, plan_date: str, attempt_count: int =
                 countdown=countdown,
             )
     except Exception as exc:
-        countdown = 2 ** (attempt_count + 1) * 60
+        if _is_non_retryable_telegram_error(exc):
+            logger.warning("Morning prompt non-retryable for user_id=%s: %s", user_id, exc)
+            asyncio.run(_send_error_to_user(user_id, "morning", str(exc)))
+            raise
+        countdown = 2 ** (attempt + 1) * 60
         try:
             self.retry(exc=exc, countdown=countdown)
         except self.MaxRetriesExceededError:
@@ -262,10 +283,31 @@ def send_morning_reminder(user_id: int, plan_date: str, reminder_attempt: int = 
             return
         settings = Settings()
         bot = Bot(token=settings.telegram_bot_token)
+        payload_sent = {"date": d.isoformat(), "reminder_attempt": reminder_attempt}
         try:
             await bot.send_message(telegram_id, REMINDER_MORNING, reply_markup=morning_reply_keyboard())
+        except Exception as e:
+            logger.exception("Morning reminder send failed user_id=%s attempt=%s: %s", user_id, reminder_attempt, e)
+            factory2, engine2 = _get_async_session()
+            async with factory2() as session:
+                await log_notification(
+                    session,
+                    user_id,
+                    TYPE_MORNING,
+                    STATUS_FAILED,
+                    {"date": d.isoformat(), "reminder_attempt": reminder_attempt, "error": str(e)},
+                )
+                await session.commit()
+            await engine2.dispose()
+            raise
         finally:
             await bot.session.close()
+
+        factory2, engine2 = _get_async_session()
+        async with factory2() as session:
+            await log_notification(session, user_id, TYPE_MORNING, STATUS_SENT, payload_sent)
+            await session.commit()
+        await engine2.dispose()
 
         countdown = compute_next_morning_reminder_countdown(
             interval_minutes=interval_minutes,
@@ -282,15 +324,20 @@ def send_morning_reminder(user_id: int, plan_date: str, reminder_attempt: int = 
 
 
 @app.task(bind=True, max_retries=3)
-def send_evening_prompt(self, user_id: int, plan_date: str, attempt_count: int = 0):
-    """Send evening review. plan_date is ISO. Schedules reminders at 1h and 3h."""
+def send_evening_prompt(self, user_id: int, plan_date: str, _attempt_count: int = 0):
+    """Send evening review. plan_date is ISO. Schedules reminders at 1h and 3h. Attempt from self.request.retries."""
     d = date.fromisoformat(plan_date)
+    attempt = self.request.retries
     try:
-        asyncio.run(_send_evening(user_id, d, attempt_count))
+        asyncio.run(_send_evening(user_id, d, attempt))
         send_evening_reminder.apply_async(args=[user_id, plan_date], countdown=3600)
         send_evening_reminder.apply_async(args=[user_id, plan_date], countdown=3600 * 3)
     except Exception as exc:
-        countdown = 2 ** (attempt_count + 1) * 60
+        if _is_non_retryable_telegram_error(exc):
+            logger.warning("Evening prompt non-retryable for user_id=%s: %s", user_id, exc)
+            asyncio.run(_send_error_to_user(user_id, "evening", str(exc)))
+            raise
+        countdown = 2 ** (attempt + 1) * 60
         try:
             self.retry(exc=exc, countdown=countdown)
         except self.MaxRetriesExceededError:

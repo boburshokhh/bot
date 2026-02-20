@@ -75,6 +75,10 @@ async def cmd_start(message: Message, session: AsyncSession):
         logger.warning("cmd_start: message.from_user is None")
         await message.answer("Не удалось определить пользователя. Напишите боту в личные сообщения.")
         return
+    if getattr(message.from_user, "is_bot", False):
+        logger.warning("cmd_start: bot account tried to start, telegram_id=%s", user_id)
+        await message.answer("Боты не могут пользоваться этим ботом. Используйте личный аккаунт.")
+        return
     logger.info("cmd_start: user_id=%s", user_id)
     try:
         await get_or_create_user(session, user_id)
@@ -100,12 +104,15 @@ async def cmd_start_button(message: Message, session: AsyncSession):
 async def cmd_time(message: Message, session: AsyncSession):
     """Show bot server time (UTC) and user's local time for debugging."""
     utc_now = datetime.now(timezone.utc)
+    telegram_id = message.from_user.id if message.from_user else None
     lines = [
         f"🕐 Время сервера бота (UTC): {utc_now.strftime('%Y-%m-%d %H:%M:%S')}",
         f"Unix (сек): {int(utc_now.timestamp())}",
+        f"Твой Telegram ID (from_user.id): {telegram_id}",
     ]
-    user = await get_user_by_telegram_id(session, message.from_user.id)
+    user = await get_user_by_telegram_id(session, telegram_id) if telegram_id is not None else None
     if user:
+        lines.append(f"В БД: user.id={user.id}, telegram_id={user.telegram_id} (должен совпадать с твоим Telegram ID)")
         try:
             tz = ZoneInfo(user.timezone)
             local_now = utc_now.astimezone(tz)
@@ -113,6 +120,26 @@ async def cmd_time(message: Message, session: AsyncSession):
             lines.append(f"Уведомления: утро {user.notify_morning_time.strftime('%H:%M')}, вечер {user.notify_evening_time.strftime('%H:%M')}")
         except Exception:
             lines.append("(часовой пояс не определён)")
+    else:
+        lines.append("В БД пользователь не найден — напиши /start")
+    await message.answer("\n".join(lines))
+
+
+@router.message(Command("me"))
+async def cmd_me(message: Message, session: AsyncSession):
+    """Show your Telegram ID and DB user record for diagnostics (e.g. compare with notification_log.user_id)."""
+    telegram_id = message.from_user.id if message.from_user else None
+    if telegram_id is None:
+        await message.answer("Не удалось определить Telegram ID.")
+        return
+    user = await get_user_by_telegram_id(session, telegram_id)
+    lines = [
+        f"Твой Telegram ID: {telegram_id}",
+        f"В БД: user.id={user.id}, telegram_id={user.telegram_id}" if user else "В БД пользователь не найден.",
+    ]
+    if user:
+        lines.append(f"Часовой пояс: {user.timezone}")
+        lines.append(f"Утро: {user.notify_morning_time.strftime('%H:%M')}, вечер: {user.notify_evening_time.strftime('%H:%M')}")
     await message.answer("\n".join(lines))
 
 
