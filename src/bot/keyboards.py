@@ -58,10 +58,12 @@ def morning_reply_keyboard() -> ReplyKeyboardMarkup:
     )
 
 
-def evening_inline_keyboard(task_ids: list[int]) -> InlineKeyboardMarkup:
-    """One row per task: [✅] [⚠] [❌] [💬]. callback_data: task_done_<id>, task_partial_<id>, task_failed_<id>, task_comment_<id>."""
+def evening_inline_keyboard(tasks_with_status: list[tuple[int, str | None]]) -> InlineKeyboardMarkup:
+    """One row per task that is not 'done': [✅] [⚠] [❌] [💬]. For status 'done' no buttons (cannot change)."""
     rows = []
-    for tid in task_ids:
+    for tid, status_enum in tasks_with_status:
+        if status_enum == "done":
+            continue
         rows.append([
             InlineKeyboardButton(text="✅", callback_data=f"task_done_{tid}"),
             InlineKeyboardButton(text="⚠", callback_data=f"task_partial_{tid}"),

@@ -78,7 +78,8 @@ async def set_status_callback(callback: CallbackQuery, session: AsyncSession, st
         text += "\n\n" + EVENING_DAY_COMMENT_PROMPT.format(done=int(done), total=total, percent=percent)
         await callback.message.edit_text(text, reply_markup=evening_done_keyboard())
     else:
-        await callback.message.edit_text(text, reply_markup=evening_inline_keyboard([t.id for t in plan.tasks]))
+        tasks_kb = [(t.id, t.status.status_enum if t.status else None) for t in sorted(plan.tasks, key=lambda x: x.position)]
+        await callback.message.edit_text(text, reply_markup=evening_inline_keyboard(tasks_kb))
 
 
 @router.callback_query(F.data.startswith("task_comment_"))
@@ -129,7 +130,8 @@ async def receive_comment(message: Message, session: AsyncSession, state: FSMCon
             for t in sorted(plan.tasks, key=lambda x: x.position)
         ]
         text = format_evening_plan(plan_date, tasks_with_status) + EVENING_AFTER_STATUSES
-        await message.answer(text, reply_markup=evening_inline_keyboard([t.id for t in plan.tasks]))
+        tasks_kb = [(t.id, t.status.status_enum if t.status else None) for t in sorted(plan.tasks, key=lambda x: x.position)]
+        await message.answer(text, reply_markup=evening_inline_keyboard(tasks_kb))
     else:
         await message.answer("План не найден.")
         await state.clear()

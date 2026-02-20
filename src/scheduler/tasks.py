@@ -180,7 +180,7 @@ async def _send_evening(user_id: int, plan_date: date, attempt_count: int) -> No
             for t in sorted(plan.tasks, key=lambda x: x.position)
         ]
         text = format_evening_plan(plan_date, tasks_with_status)
-        task_ids = [t.id for t in plan.tasks]
+        tasks_kb = [(t.id, t.status.status_enum if t.status else None) for t in sorted(plan.tasks, key=lambda x: x.position)]
         plan_id = plan.id
         await set_awaiting_confirmation(
             settings.redis_url, settings.telegram_bot_token, telegram_id, plan_id, plan_date, user_id
@@ -193,7 +193,7 @@ async def _send_evening(user_id: int, plan_date: date, attempt_count: int) -> No
         await bot.send_message(
             telegram_id,
             text,
-            reply_markup=evening_inline_keyboard(task_ids),
+            reply_markup=evening_inline_keyboard(tasks_kb),
         )
         factory2, engine2 = _get_async_session()
         async with factory2() as session:

@@ -240,10 +240,10 @@ async def cmd_test_evening(message: Message, session: AsyncSession):
                 for t in sorted(plan.tasks, key=lambda x: x.position)
             ]
             text = format_evening_plan(plan_date, tasks_with_status)
-            task_ids = [t.id for t in plan.tasks]
+            tasks_kb = [(t.id, t.status.status_enum if t.status else None) for t in sorted(plan.tasks, key=lambda x: x.position)]
             await message.answer(
                 text,
-                reply_markup=evening_inline_keyboard(task_ids),
+                reply_markup=evening_inline_keyboard(tasks_kb),
             )
         await message.answer(TEST_EVENING_SENT)
     except Exception as e:
