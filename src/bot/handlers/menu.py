@@ -42,7 +42,6 @@ from src.bot.text import COMMANDS_OVERVIEW, TIMEZONE_CHOOSE_PROMPT
 from src.bot.states import MenuStates, SettingsStates
 from src.bot.user_flow import get_user_or_ask_timezone
 from src.db.models import NotificationLog
-from src.scheduler.tasks import send_evening_prompt, send_morning_prompt
 from src.services.notifications import TYPE_EVENING, TYPE_MORNING, STATUS_SENT
 from src.services.user import (
     update_morning_reminder_settings,
@@ -179,7 +178,7 @@ async def menu_settings_intervals(message: Message, state: FSMContext):
 
 @router.message(MenuStates.settings, F.text == BTN_RESET_NOTIFICATIONS)
 async def action_reset_notifications(message: Message, session: AsyncSession):
-    """Сбросить записи «уже отправлено» за сегодня и поставить в очередь утреннее и вечернее — для теста."""
+    """Сбросить записи «уже отправлено» за сегодня. Время уведомлений не меняется, повторная отправка — по расписанию."""
     user = await get_user_or_ask_timezone(session, message.from_user.id, message)
     if not user:
         return
@@ -200,10 +199,8 @@ async def action_reset_notifications(message: Message, session: AsyncSession):
             )
         )
     await session.commit()
-    send_morning_prompt.delay(user.id, today_iso, 0)
-    send_evening_prompt.delay(user.id, today_iso, 0)
     await message.answer(
-        "Сбросил записи об отправке за сегодня. Утреннее и вечернее уведомления поставлены в очередь — придут в течение минуты."
+        "Сбросил записи об отправке за сегодня. Время уведомлений не изменилось — утро и вечер придут в настроенное время."
     )
 
 
