@@ -435,6 +435,7 @@ def dispatch_daily_notifications():
                         select(NotificationLog).where(
                             NotificationLog.user_id == user.id,
                             NotificationLog.type == TYPE_MORNING,
+                            NotificationLog.status == STATUS_SENT,
                             NotificationLog.payload["date"].astext == user_today.isoformat(),
                         ).limit(1)
                     )
@@ -443,12 +444,13 @@ def dispatch_daily_notifications():
                         logger.info("Dispatching morning prompt for user_id=%s date=%s", user.id, user_today)
                         send_morning_prompt.delay(user.id, user_today.isoformat(), 0)
                     else:
-                        logger.debug("Morning already sent for user_id=%s date=%s", user.id, user_today)
+                        logger.info("Skipping morning dispatch for user_id=%s date=%s (already have log)", user.id, user_today)
                 if et and _in_dispatch_window(now_m, et, window):
                     r2 = await session.execute(
                         select(NotificationLog).where(
                             NotificationLog.user_id == user.id,
                             NotificationLog.type == TYPE_EVENING,
+                            NotificationLog.status == STATUS_SENT,
                             NotificationLog.payload["date"].astext == user_today.isoformat(),
                         ).limit(1)
                     )
@@ -457,7 +459,7 @@ def dispatch_daily_notifications():
                         logger.info("Dispatching evening prompt for user_id=%s date=%s", user.id, user_today)
                         send_evening_prompt.delay(user.id, user_today.isoformat(), 0)
                     else:
-                        logger.debug("Evening already sent for user_id=%s date=%s", user.id, user_today)
+                        logger.info("Skipping evening dispatch for user_id=%s date=%s (already have log)", user.id, user_today)
         await engine.dispose()
 
     asyncio.run(_run())
