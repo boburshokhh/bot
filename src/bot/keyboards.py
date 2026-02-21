@@ -122,8 +122,10 @@ def _nav_row_reply() -> list[list[KeyboardButton]]:
 def main_menu_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text=BTN_PLAN), KeyboardButton(text=BTN_STATS)],
-            [KeyboardButton(text=BTN_SETTINGS), KeyboardButton(text=BTN_HELP)],
+            [KeyboardButton(text=BTN_PLAN)],
+            [KeyboardButton(text=BTN_STATS)],
+            [KeyboardButton(text=BTN_SETTINGS)],
+            [KeyboardButton(text=BTN_HELP)],
         ],
         resize_keyboard=True,
     )

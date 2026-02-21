@@ -1,5 +1,6 @@
 """Database package."""
 from src.db.models import (
+    CustomReminder,
     NotificationLog,
     Plan,
     Task,
@@ -14,6 +15,7 @@ from src.db.session import (
 )
 
 __all__ = [
+    "CustomReminder",
     "User",
     "Plan",
     "Task",
