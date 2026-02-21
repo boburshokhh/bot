@@ -135,6 +135,38 @@ async def delete_custom_reminder(session: AsyncSession, reminder_id: int, user_i
     return r.rowcount > 0
 
 
+async def update_custom_reminder(
+    session: AsyncSession,
+    reminder_id: int,
+    user_id: int,
+    *,
+    time_of_day: time | None = None,
+    description: str | None = None,
+    repeat_interval_minutes: int | None = None,
+    max_attempts_per_day: int | None = None,
+) -> bool:
+    """Обновить поля напоминания. При смене времени пересчитывается next_fire_at_utc."""
+    reminder = await get_custom_reminder(session, reminder_id)
+    if not reminder or reminder.user_id != user_id:
+        return False
+    if time_of_day is not None:
+        reminder.time_of_day = time_of_day
+    if description is not None:
+        reminder.description = description.strip()[:500] or reminder.description
+    if repeat_interval_minutes is not None:
+        reminder.repeat_interval_minutes = repeat_interval_minutes
+    if max_attempts_per_day is not None:
+        reminder.max_attempts_per_day = max_attempts_per_day
+    if time_of_day is not None and reminder.user:
+        now_utc = datetime.now(timezone.utc)
+        next_fire_utc, cycle_date = compute_next_daily_fire_utc(
+            reminder.user.timezone, reminder.time_of_day, now_utc
+        )
+        reminder.next_fire_at_utc = next_fire_utc
+        reminder.cycle_local_date = cycle_date
+    return True
+
+
 async def toggle_custom_reminder(session: AsyncSession, reminder_id: int, user_id: int, enabled: bool) -> bool:
     r = await session.execute(
         update(CustomReminder)

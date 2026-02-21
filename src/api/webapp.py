@@ -21,6 +21,7 @@ from src.services.reminders import (
     list_custom_reminders,
     get_custom_reminder,
     get_reminder_stats,
+    update_custom_reminder,
     delete_custom_reminder,
     toggle_custom_reminder,
     mark_reminder_done_today,
@@ -67,6 +68,10 @@ class CreateReminderPayload(BaseModel):
 class ReminderUpdatePayload(BaseModel):
     enabled: bool | None = None
     mark_done_today: bool | None = None
+    time_of_day: str | None = None  # HH:MM
+    description: str | None = None
+    repeat_interval_minutes: int | None = Field(default=None, ge=1, le=1440)
+    max_attempts_per_day: int | None = Field(default=None, ge=1, le=50)
 
 
 def _parse_hhmm(value: str) -> time:
@@ -282,6 +287,17 @@ async def api_reminders_update(
         await mark_reminder_done_today(session, reminder_id, user.id)
     if payload.enabled is not None:
         await toggle_custom_reminder(session, reminder_id, user.id, payload.enabled)
+    # Редактирование полей
+    time_of_day = _parse_hhmm(payload.time_of_day) if payload.time_of_day else None
+    await update_custom_reminder(
+        session,
+        reminder_id,
+        user.id,
+        time_of_day=time_of_day,
+        description=payload.description,
+        repeat_interval_minutes=payload.repeat_interval_minutes,
+        max_attempts_per_day=payload.max_attempts_per_day,
+    )
     await session.commit()
     return {"ok": True}
 

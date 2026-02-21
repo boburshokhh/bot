@@ -63,6 +63,15 @@
           </div>
           <div class="reminder-actions">
             <el-button
+              type="primary"
+              size="small"
+              circle
+              title="Изменить"
+              @click="openEdit(r)"
+            >
+              <el-icon><Edit /></el-icon>
+            </el-button>
+            <el-button
               v-if="r.enabled && !r.done_today"
               type="success"
               size="small"
@@ -161,6 +170,58 @@
     </template>
 
     <el-dialog
+      v-model="editDialogVisible"
+      title="Изменить напоминание"
+      width="90%"
+      :close-on-click-modal="false"
+    >
+      <el-form :model="editForm" label-position="top">
+        <el-row :gutter="12">
+          <el-col :span="8">
+            <el-form-item label="Время (HH:MM)">
+              <el-input v-model="editForm.time_of_day" placeholder="14:30" maxlength="5" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="16">
+            <el-form-item label="Описание">
+              <el-input v-model="editForm.description" placeholder="Описание" clearable />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="12">
+          <el-col :span="12">
+            <el-form-item label="Повторять каждые (мин)">
+              <el-input-number
+                v-model="editForm.repeat_interval_minutes"
+                :min="1"
+                :max="1440"
+                controls-position="right"
+                style="width: 100%;"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="Макс. раз в день">
+              <el-input-number
+                v-model="editForm.max_attempts_per_day"
+                :min="1"
+                :max="50"
+                controls-position="right"
+                style="width: 100%;"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+      </el-form>
+      <template #footer>
+        <el-button @click="editDialogVisible = false">Отмена</el-button>
+        <el-button type="primary" :loading="savingEdit" @click="saveEdit">
+          Сохранить
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
       v-model="deleteDialogVisible"
       title="Удалить напоминание?"
       width="90%"
@@ -185,6 +246,7 @@ import {
   BellFilled,
   Check,
   Delete,
+  Edit,
   Plus,
   CircleClose,
 } from '@element-plus/icons-vue'
@@ -206,6 +268,16 @@ const saving = ref(false)
 const deleting = ref(false)
 const deleteDialogVisible = ref(false)
 const reminderToDelete = ref(null)
+
+const editDialogVisible = ref(false)
+const savingEdit = ref(false)
+const editingReminderId = ref(null)
+const editForm = reactive({
+  time_of_day: '09:00',
+  description: '',
+  repeat_interval_minutes: 30,
+  max_attempts_per_day: 3,
+})
 
 const form = reactive({
   time_of_day: '09:00',
@@ -282,6 +354,46 @@ async function markDone(id) {
     emit('refresh')
   } catch (err) {
     ElMessage.error('Ошибка: ' + err.message)
+  }
+}
+
+function openEdit(r) {
+  editingReminderId.value = r.id
+  editForm.time_of_day = r.time_of_day
+  editForm.description = r.description
+  editForm.repeat_interval_minutes = r.repeat_interval_minutes
+  editForm.max_attempts_per_day = r.max_attempts_per_day
+  editDialogVisible.value = true
+}
+
+async function saveEdit() {
+  const desc = editForm.description?.trim()
+  if (!desc) {
+    ElMessage.warning('Введите описание')
+    return
+  }
+  if (!validateTime(editForm.time_of_day)) {
+    ElMessage.warning('Время в формате HH:MM (например 14:30)')
+    return
+  }
+  const id = editingReminderId.value
+  if (id == null) return
+  savingEdit.value = true
+  try {
+    await api.put(`/api/reminders/${id}`, {
+      time_of_day: editForm.time_of_day,
+      description: desc,
+      repeat_interval_minutes: editForm.repeat_interval_minutes,
+      max_attempts_per_day: editForm.max_attempts_per_day,
+    })
+    ElMessage.success('Напоминание обновлено')
+    editDialogVisible.value = false
+    await loadReminders()
+    emit('refresh')
+  } catch (err) {
+    ElMessage.error('Ошибка: ' + err.message)
+  } finally {
+    savingEdit.value = false
   }
 }
 
