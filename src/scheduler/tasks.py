@@ -518,7 +518,7 @@ def send_custom_reminder(self, reminder_id: int):
                 settings = Settings()
                 bot = Bot(token=settings.telegram_bot_token)
                 try:
-                    from src.bot.keyboards import custom_reminder_inline_keyboard
+                    from src.bot.keyboards import custom_reminder_inline_keyboard, main_menu_keyboard
                     from src.services.reminders import compute_next_daily_fire_utc
 
                     text = f"🔔 Напоминание:\n\n{reminder.description}"
@@ -526,6 +526,12 @@ def send_custom_reminder(self, reminder_id: int):
                         user.telegram_id,
                         text,
                         reply_markup=custom_reminder_inline_keyboard(reminder.id),
+                    )
+                    # Восстанавливаем reply-клавиатуру меню, чтобы после уведомления она не пропадала
+                    await bot.send_message(
+                        user.telegram_id,
+                        "Выберите раздел:",
+                        reply_markup=main_menu_keyboard(),
                     )
                     now_utc = datetime.now(timezone.utc)
                     reminder.attempts_sent_today += 1
