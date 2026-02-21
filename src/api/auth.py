@@ -81,4 +81,11 @@ async def get_webapp_user(
     user = await get_user_by_telegram_id(session, payload.user_id)
     if not user:
         user = await get_or_create_user(session, payload.user_id)
+        
+    if not user.onboarding_tz_confirmed or not user.onboarding_morning_confirmed or not user.onboarding_evening_confirmed:
+        raise HTTPException(
+            status_code=403, 
+            detail="Пожалуйста, завершите первоначальную настройку в боте."
+        )
+        
     return user

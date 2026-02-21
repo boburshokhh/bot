@@ -18,7 +18,7 @@ from src.bot.text import (
     PLAN_SAVED,
     PLAN_SKIPPED,
 )
-from src.bot.user_flow import get_user_or_ask_timezone
+from src.bot.user_flow import get_user_or_run_onboarding
 from src.logic.plan_parser import parse_plan_lines, validate_plan_text
 from src.services.plan import delete_plan, get_plan_for_date, save_plan
 
@@ -27,7 +27,7 @@ router = Router()
 
 @router.message(Command("plan"))
 async def cmd_plan(message: Message, session: AsyncSession, state: FSMContext):
-    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
+    user = await get_user_or_run_onboarding(session, message.from_user.id, message, state)
     if not user:
         return
     today = date.today()
@@ -48,7 +48,7 @@ async def receive_plan(message: Message, session: AsyncSession, state: FSMContex
     if not ok:
         await message.answer(err)
         return
-    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
+    user = await get_user_or_run_onboarding(session, message.from_user.id, message, state)
     if not user:
         return
     data = await state.get_data()
@@ -95,7 +95,7 @@ async def already_sent_any_state(message: Message, state: FSMContext):
 
 @router.message(Command("delete_plan"))
 async def cmd_delete_plan(message: Message, session: AsyncSession, state: FSMContext):
-    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
+    user = await get_user_or_run_onboarding(session, message.from_user.id, message, state)
     if not user:
         return
     today = date.today()

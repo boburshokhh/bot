@@ -19,6 +19,11 @@ class User(Base):
     notify_evening_time: Mapped[time] = mapped_column(Time, nullable=False, default=time(21, 0))
     morning_reminder_interval_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
     morning_reminder_max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    
+    onboarding_tz_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false", default=False)
+    onboarding_morning_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false", default=False)
+    onboarding_evening_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false", default=False)
+
     created_at: Mapped[datetime] = mapped_column(nullable=False, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -91,6 +96,8 @@ class CustomReminder(Base):
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
     time_of_day: Mapped[time] = mapped_column(Time, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
+    
+    day_of_month: Mapped[int | None] = mapped_column(Integer, nullable=True)
     
     repeat_interval_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
     max_attempts_per_day: Mapped[int] = mapped_column(Integer, nullable=False, default=1)

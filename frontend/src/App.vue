@@ -11,7 +11,16 @@
           </div>
         </el-card>
 
-        <el-tabs v-model="activeTab" class="main-tabs" @tab-change="handleTabChange">
+        <div v-if="hasAccessError" style="margin-top: 20px; text-align: center;">
+          <el-result
+            icon="warning"
+            title="Доступ ограничен"
+            sub-title="Пожалуйста, вернитесь в бот и завершите первоначальную настройку (выбор часового пояса и времени уведомлений)."
+          >
+          </el-result>
+        </div>
+
+        <el-tabs v-else v-model="activeTab" class="main-tabs" @tab-change="handleTabChange">
           <el-tab-pane label="План" name="plan">
             <template #label>
               <span class="tab-label">
@@ -90,6 +99,7 @@ const { isDark } = useTelegramTheme()
 const { api } = useApi()
 
 const activeTab = ref('plan')
+const hasAccessError = ref(false)
 
 const loading = reactive({
   today: true,
@@ -105,37 +115,49 @@ function handleTabChange(name) {
   // Можно добавить логику при смене таба
 }
 
+function handleApiError(err) {
+  if (err.message && err.message.includes('403')) {
+    hasAccessError.value = true
+    ElMessage.warning({ message: err.message || 'Пожалуйста, завершите настройку в боте', duration: 5000 })
+  } else {
+    ElMessage.error(err.message)
+  }
+}
+
 async function loadToday() {
+  if (hasAccessError.value) return
   loading.today = true
   try {
     const data = await api.get('/api/today')
     today.value = data
   } catch (err) {
-    ElMessage.error('Ошибка загрузки плана: ' + err.message)
+    handleApiError(err)
   } finally {
     loading.today = false
   }
 }
 
 async function loadSettings() {
+  if (hasAccessError.value) return
   loading.settings = true
   try {
     const s = await api.get('/api/settings')
     settings.value = s
   } catch (err) {
-    ElMessage.error('Ошибка загрузки настроек: ' + err.message)
+    handleApiError(err)
   } finally {
     loading.settings = false
   }
 }
 
 async function loadStats() {
+  if (hasAccessError.value) return
   loading.stats = true
   try {
     const s = await api.get('/api/stats')
     stats.value = s
   } catch (err) {
-    ElMessage.error('Ошибка загрузки статистики: ' + err.message)
+    handleApiError(err)
   } finally {
     loading.stats = false
   }
@@ -147,8 +169,24 @@ async function handlePlanSaved() {
 
 onMounted(async () => {
   initWebApp()
-  await Promise.all([loadToday(), loadSettings(), loadStats()])
-  ElMessage.success({ message: 'WebApp готов', duration: 2000 })
+  
+  // Пытаемся загрузить настройки, чтобы сразу поймать 403, если он есть
+  loading.today = true
+  loading.settings = true
+  loading.stats = true
+  try {
+    const s = await api.get('/api/settings')
+    settings.value = s
+    // Если 403 не было, грузим остальное
+    await Promise.all([loadToday(), loadStats()])
+    ElMessage.success({ message: 'WebApp готов', duration: 2000 })
+  } catch (err) {
+    handleApiError(err)
+  } finally {
+    loading.today = false
+    loading.settings = false
+    loading.stats = false
+  }
 })
 </script>
 

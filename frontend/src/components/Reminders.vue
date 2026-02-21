@@ -56,7 +56,7 @@
             <span class="reminder-time">{{ r.time_of_day }}</span>
             <span class="reminder-desc">{{ r.description }}</span>
             <el-text type="info" size="small" class="reminder-meta">
-              Повтор: каждые {{ r.repeat_interval_minutes }} мин, до {{ r.max_attempts_per_day }} раз в день
+              {{ r.day_of_month ? `Каждое ${r.day_of_month} число` : 'Ежедневно' }} | Повтор: каждые {{ r.repeat_interval_minutes }} мин, до {{ r.max_attempts_per_day }} раз в день
             </el-text>
             <el-tag v-if="r.done_today" type="success" size="small">Выполнено сегодня</el-tag>
             <el-tag v-else-if="!r.enabled" type="info" size="small">Отключено</el-tag>
@@ -113,6 +113,16 @@
           @submit.prevent="addReminder"
         >
           <el-row :gutter="12">
+            <el-col :span="24">
+              <el-form-item label="Частота">
+                <el-radio-group v-model="form.is_monthly" size="small">
+                  <el-radio-button :label="false">Ежедневно</el-radio-button>
+                  <el-radio-button :label="true">Раз в месяц</el-radio-button>
+                </el-radio-group>
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="12">
             <el-col :span="8">
               <el-form-item label="Время (HH:MM)">
                 <el-input
@@ -122,7 +132,18 @@
                 />
               </el-form-item>
             </el-col>
-            <el-col :span="16">
+            <el-col :span="6" v-if="form.is_monthly">
+              <el-form-item label="Число">
+                <el-input-number
+                  v-model="form.day_of_month"
+                  :min="1"
+                  :max="31"
+                  controls-position="right"
+                  style="width: 100%;"
+                />
+              </el-form-item>
+            </el-col>
+            <el-col :span="form.is_monthly ? 10 : 16">
               <el-form-item label="Описание">
                 <el-input
                   v-model="form.description"
@@ -177,12 +198,33 @@
     >
       <el-form :model="editForm" label-position="top">
         <el-row :gutter="12">
+          <el-col :span="24">
+            <el-form-item label="Частота">
+              <el-radio-group v-model="editForm.is_monthly" size="small">
+                <el-radio-button :label="false">Ежедневно</el-radio-button>
+                <el-radio-button :label="true">Раз в месяц</el-radio-button>
+              </el-radio-group>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="12">
           <el-col :span="8">
             <el-form-item label="Время (HH:MM)">
               <el-input v-model="editForm.time_of_day" placeholder="14:30" maxlength="5" />
             </el-form-item>
           </el-col>
-          <el-col :span="16">
+          <el-col :span="6" v-if="editForm.is_monthly">
+            <el-form-item label="Число">
+              <el-input-number
+                v-model="editForm.day_of_month"
+                :min="1"
+                :max="31"
+                controls-position="right"
+                style="width: 100%;"
+              />
+            </el-form-item>
+          </el-col>
+          <el-col :span="editForm.is_monthly ? 10 : 16">
             <el-form-item label="Описание">
               <el-input v-model="editForm.description" placeholder="Описание" clearable />
             </el-form-item>
@@ -277,6 +319,8 @@ const editForm = reactive({
   description: '',
   repeat_interval_minutes: 30,
   max_attempts_per_day: 3,
+  is_monthly: false,
+  day_of_month: 1,
 })
 
 const form = reactive({
@@ -284,6 +328,8 @@ const form = reactive({
   description: '',
   repeat_interval_minutes: 30,
   max_attempts_per_day: 3,
+  is_monthly: false,
+  day_of_month: 1,
 })
 
 function validateTime(s) {
@@ -323,6 +369,7 @@ async function addReminder() {
       description: desc,
       repeat_interval_minutes: form.repeat_interval_minutes,
       max_attempts_per_day: form.max_attempts_per_day,
+      day_of_month: form.is_monthly ? form.day_of_month : null,
     })
     ElMessage.success('Напоминание добавлено')
     form.description = ''
@@ -363,6 +410,8 @@ function openEdit(r) {
   editForm.description = r.description
   editForm.repeat_interval_minutes = r.repeat_interval_minutes
   editForm.max_attempts_per_day = r.max_attempts_per_day
+  editForm.is_monthly = r.day_of_month != null
+  editForm.day_of_month = r.day_of_month || 1
   editDialogVisible.value = true
 }
 
@@ -385,6 +434,7 @@ async function saveEdit() {
       description: desc,
       repeat_interval_minutes: editForm.repeat_interval_minutes,
       max_attempts_per_day: editForm.max_attempts_per_day,
+      day_of_month: editForm.is_monthly ? editForm.day_of_month : null,
     })
     ElMessage.success('Напоминание обновлено')
     editDialogVisible.value = false

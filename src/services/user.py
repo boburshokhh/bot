@@ -48,6 +48,27 @@ async def update_user_timezone(session: AsyncSession, user_id: int, timezone: st
     return user
 
 
+async def update_onboarding_flags(
+    session: AsyncSession,
+    user_id: int,
+    *,
+    tz_confirmed: bool | None = None,
+    morning_confirmed: bool | None = None,
+    evening_confirmed: bool | None = None,
+) -> User | None:
+    user = await get_user_by_id(session, user_id)
+    if not user:
+        return None
+    if tz_confirmed is not None:
+        user.onboarding_tz_confirmed = tz_confirmed
+    if morning_confirmed is not None:
+        user.onboarding_morning_confirmed = morning_confirmed
+    if evening_confirmed is not None:
+        user.onboarding_evening_confirmed = evening_confirmed
+    await session.flush()
+    return user
+
+
 async def update_notify_times(
     session: AsyncSession,
     user_id: int,

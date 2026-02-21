@@ -13,12 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import json
 
 from src.bot.keyboards import main_menu_keyboard, tz_keyboard, webapp_keyboard, morning_reply_keyboard, evening_inline_keyboard
-from src.bot.states import MenuStates
+from src.bot.states import MenuStates, OnboardingStates
 from src.bot.text import (
     COMMANDS_OVERVIEW, TIMEZONE_CHOOSE_PROMPT, WELCOME, format_settings, format_tz_set,
     MORNING_PROMPT, TEST_MORNING_SENT, TEST_EVENING_SENT, TEST_DELIVERY_ERROR, format_evening_plan
 )
-from src.bot.user_flow import get_user_or_ask_timezone
+from src.bot.user_flow import get_user_or_run_onboarding
 from src.config import Settings
 from src.db.models import NotificationLog
 from src.scheduler.tasks import _get_dispatch_window, send_evening_prompt, send_morning_prompt
@@ -30,6 +30,7 @@ from src.services.user import (
     update_morning_reminder_settings,
     update_notify_times,
     update_user_timezone,
+    update_onboarding_flags,
 )
 
 router = Router()
@@ -72,7 +73,7 @@ def _build_webapp_url() -> str | None:
 
 
 @router.message(Command("start"))
-async def cmd_start(message: Message, session: AsyncSession):
+async def cmd_start(message: Message, session: AsyncSession, state: FSMContext):
     user_id = message.from_user.id if message.from_user else None
     if user_id is None:
         logger.warning("cmd_start: message.from_user is None")
@@ -84,8 +85,13 @@ async def cmd_start(message: Message, session: AsyncSession):
         return
     logger.info("cmd_start: user_id=%s", user_id)
     try:
-        await get_or_create_user(session, user_id)
-        await message.answer(WELCOME, reply_markup=tz_keyboard(include_detect=True))
+        user = await get_user_or_run_onboarding(session, user_id, message, state)
+        if user:
+            await state.set_state(MenuStates.main)
+            await message.answer("Главное меню:", reply_markup=main_menu_keyboard())
+            webapp_url = _build_webapp_url()
+            if webapp_url:
+                await message.answer("Открыть панель управления:", reply_markup=webapp_keyboard(webapp_url))
     except Exception as e:
         logger.exception("cmd_start failed: %s", e)
         try:
@@ -98,9 +104,9 @@ async def cmd_start(message: Message, session: AsyncSession):
 
 
 @router.message(F.text.in_({"Start", "Запустить", "start"}))
-async def cmd_start_button(message: Message, session: AsyncSession):
+async def cmd_start_button(message: Message, session: AsyncSession, state: FSMContext):
     """Handle Start/Запустить button (some clients send text without slash)."""
-    await cmd_start(message, session)
+    await cmd_start(message, session, state)
 
 
 @router.message(Command("time"))
@@ -310,8 +316,8 @@ async def cmd_help(message: Message):
 
 
 @router.message(Command("settings"))
-async def cmd_settings(message: Message, session: AsyncSession):
-    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
+async def cmd_settings(message: Message, session: AsyncSession, state: FSMContext):
+    user = await get_user_or_run_onboarding(session, message.from_user.id, message, state)
     if not user:
         return
     await message.answer(
@@ -329,16 +335,16 @@ async def cmd_settings(message: Message, session: AsyncSession):
 
 
 @router.message(Command("timezone"))
-async def cmd_timezone(message: Message, session: AsyncSession):
-    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
+async def cmd_timezone(message: Message, session: AsyncSession, state: FSMContext):
+    user = await get_user_or_run_onboarding(session, message.from_user.id, message, state)
     if not user:
         return
     await message.answer(TIMEZONE_CHOOSE_PROMPT, reply_markup=tz_keyboard(include_detect=True))
 
 
 @router.message(Command("set_morning"))
-async def cmd_set_morning(message: Message, session: AsyncSession):
-    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
+async def cmd_set_morning(message: Message, session: AsyncSession, state: FSMContext):
+    user = await get_user_or_run_onboarding(session, message.from_user.id, message, state)
     if not user:
         return
     value = _extract_command_arg(message.text)
@@ -351,8 +357,8 @@ async def cmd_set_morning(message: Message, session: AsyncSession):
 
 
 @router.message(Command("set_evening"))
-async def cmd_set_evening(message: Message, session: AsyncSession):
-    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
+async def cmd_set_evening(message: Message, session: AsyncSession, state: FSMContext):
+    user = await get_user_or_run_onboarding(session, message.from_user.id, message, state)
     if not user:
         return
     value = _extract_command_arg(message.text)
@@ -365,8 +371,8 @@ async def cmd_set_evening(message: Message, session: AsyncSession):
 
 
 @router.message(Command("set_interval"))
-async def cmd_set_interval(message: Message, session: AsyncSession):
-    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
+async def cmd_set_interval(message: Message, session: AsyncSession, state: FSMContext):
+    user = await get_user_or_run_onboarding(session, message.from_user.id, message, state)
     if not user:
         return
     value = _extract_command_arg(message.text)
@@ -382,8 +388,8 @@ async def cmd_set_interval(message: Message, session: AsyncSession):
 
 
 @router.message(Command("set_attempts"))
-async def cmd_set_attempts(message: Message, session: AsyncSession):
-    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
+async def cmd_set_attempts(message: Message, session: AsyncSession, state: FSMContext):
+    user = await get_user_or_run_onboarding(session, message.from_user.id, message, state)
     if not user:
         return
     value = _extract_command_arg(message.text)
@@ -399,8 +405,8 @@ async def cmd_set_attempts(message: Message, session: AsyncSession):
 
 
 @router.message(Command("webapp"))
-async def cmd_webapp(message: Message, session: AsyncSession):
-    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
+async def cmd_webapp(message: Message, session: AsyncSession, state: FSMContext):
+    user = await get_user_or_run_onboarding(session, message.from_user.id, message, state)
     if not user:
         return
     webapp_url = _build_webapp_url()
@@ -410,6 +416,7 @@ async def cmd_webapp(message: Message, session: AsyncSession):
     await message.answer("Открыть веб-панель управления:", reply_markup=webapp_keyboard(webapp_url))
 
 
+@router.message(OnboardingStates.awaiting_timezone, F.text.in_(ALLOWED_TZ))
 @router.message(F.text.in_(ALLOWED_TZ))
 async def set_timezone(message: Message, session: AsyncSession, state: FSMContext):
     tz = message.text.strip()
@@ -418,12 +425,9 @@ async def set_timezone(message: Message, session: AsyncSession, state: FSMContex
         user = await get_or_create_user(session, message.from_user.id, timezone=tz)
     else:
         await update_user_timezone(session, user.id, tz)
+    await update_onboarding_flags(session, user.id, tz_confirmed=True)
     await message.answer(format_tz_set(user.notify_morning_time), reply_markup=ReplyKeyboardRemove())
-    await state.set_state(MenuStates.main)
-    await message.answer("Выберите раздел:", reply_markup=main_menu_keyboard())
-    webapp_url = _build_webapp_url()
-    if webapp_url:
-        await message.answer("Открыть панель управления:", reply_markup=webapp_keyboard(webapp_url))
+    await get_user_or_run_onboarding(session, message.from_user.id, message, state)
 
 
 @router.message(F.web_app_data)
@@ -445,15 +449,62 @@ async def handle_webapp_data(message: Message, session: AsyncSession, state: FSM
                 user = await get_or_create_user(session, message.from_user.id, timezone=tz)
             else:
                 await update_user_timezone(session, user.id, tz)
-            await message.answer(f"✅ Часовой пояс сохранён: {tz}")
-            await state.set_state(MenuStates.main)
-            await message.answer("Выберите раздел:", reply_markup=main_menu_keyboard())
-            webapp_url = _build_webapp_url()
-            if webapp_url:
-                await message.answer("Открыть панель управления:", reply_markup=webapp_keyboard(webapp_url))
+            await update_onboarding_flags(session, user.id, tz_confirmed=True)
+            await message.answer(f"✅ Часовой пояс сохранён: {tz}", reply_markup=ReplyKeyboardRemove())
+            await get_user_or_run_onboarding(session, message.from_user.id, message, state)
         else:
             await message.answer("❌ Неизвестные данные из WebApp")
     except json.JSONDecodeError:
         await message.answer("❌ Ошибка обработки данных из WebApp")
     except Exception as e:
         await message.answer(f"❌ Ошибка: {str(e)}")
+
+
+@router.message(OnboardingStates.awaiting_morning_time, F.text)
+async def onboarding_morning_time(message: Message, session: AsyncSession, state: FSMContext):
+    text = (message.text or "").strip()
+    user = await get_user_by_telegram_id(session, message.from_user.id)
+    if not user:
+        return
+    
+    if text.startswith("Оставить "):
+        text = text.replace("Оставить ", "").strip()
+    
+    t = _parse_hhmm(text)
+    if not t:
+        await message.answer("Неверный формат. Введите HH:MM (например 07:30) или нажмите кнопку.")
+        return
+    
+    await update_notify_times(session, user.id, notify_morning_time=t)
+    await update_onboarding_flags(session, user.id, morning_confirmed=True)
+    await message.answer(f"Утреннее время сохранено: {t.strftime('%H:%M')}", reply_markup=ReplyKeyboardRemove())
+    await get_user_or_run_onboarding(session, message.from_user.id, message, state)
+
+
+@router.message(OnboardingStates.awaiting_evening_time, F.text)
+async def onboarding_evening_time(message: Message, session: AsyncSession, state: FSMContext):
+    text = (message.text or "").strip()
+    user = await get_user_by_telegram_id(session, message.from_user.id)
+    if not user:
+        return
+    
+    if text.startswith("Оставить "):
+        text = text.replace("Оставить ", "").strip()
+    
+    t = _parse_hhmm(text)
+    if not t:
+        await message.answer("Неверный формат. Введите HH:MM (например 21:30) или нажмите кнопку.")
+        return
+    
+    await update_notify_times(session, user.id, notify_evening_time=t)
+    await update_onboarding_flags(session, user.id, evening_confirmed=True)
+    await message.answer(f"Вечернее время сохранено: {t.strftime('%H:%M')}", reply_markup=ReplyKeyboardRemove())
+    
+    # After evening, onboarding is fully confirmed
+    user = await get_user_or_run_onboarding(session, message.from_user.id, message, state)
+    if user:
+        await state.set_state(MenuStates.main)
+        await message.answer("Настройка завершена! Добро пожаловать. Выберите раздел:", reply_markup=main_menu_keyboard())
+        webapp_url = _build_webapp_url()
+        if webapp_url:
+            await message.answer("Открыть панель управления:", reply_markup=webapp_keyboard(webapp_url))

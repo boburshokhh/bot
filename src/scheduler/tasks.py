@@ -406,7 +406,13 @@ def dispatch_daily_notifications():
         window = _get_dispatch_window()
         factory, engine = _get_async_session()
         async with factory() as session:
-            r = await session.execute(select(User))
+            r = await session.execute(
+                select(User).where(
+                    User.onboarding_tz_confirmed == True,
+                    User.onboarding_morning_confirmed == True,
+                    User.onboarding_evening_confirmed == True,
+                )
+            )
             users = list(r.scalars().all())
             logger.info("dispatch_daily_notifications: checking %d user(s), window=%d min", len(users), window)
             for user in users:

@@ -2,6 +2,12 @@
 from aiogram.fsm.state import State, StatesGroup
 
 
+class OnboardingStates(StatesGroup):
+    awaiting_timezone = State()
+    awaiting_morning_time = State()
+    awaiting_evening_time = State()
+
+
 class PlanStates(StatesGroup):
     idle = State()
     awaiting_plan = State()
@@ -27,6 +33,8 @@ class MenuStates(StatesGroup):
 
 
 class ReminderStates(StatesGroup):
+    awaiting_type = State()
+    awaiting_day_of_month = State()
     awaiting_time = State()
     awaiting_description = State()
     awaiting_interval = State()

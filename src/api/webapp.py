@@ -63,6 +63,7 @@ class CreateReminderPayload(BaseModel):
     description: str
     repeat_interval_minutes: int = Field(ge=1, le=1440, default=30)
     max_attempts_per_day: int = Field(ge=1, le=50, default=3)
+    day_of_month: int | None = Field(default=None, ge=1, le=31)
 
 
 class ReminderUpdatePayload(BaseModel):
@@ -72,6 +73,7 @@ class ReminderUpdatePayload(BaseModel):
     description: str | None = None
     repeat_interval_minutes: int | None = Field(default=None, ge=1, le=1440)
     max_attempts_per_day: int | None = Field(default=None, ge=1, le=50)
+    day_of_month: int | None = Field(default=None, ge=1, le=31)
 
 
 def _parse_hhmm(value: str) -> time:
@@ -239,6 +241,7 @@ async def api_reminders_list(
             "description": r.description,
             "repeat_interval_minutes": r.repeat_interval_minutes,
             "max_attempts_per_day": r.max_attempts_per_day,
+            "day_of_month": r.day_of_month,
             "enabled": r.enabled,
             "done_today": r.done_today,
             "attempts_sent_today": r.attempts_sent_today,
@@ -261,6 +264,7 @@ async def api_reminders_create(
         description=payload.description.strip()[:500] or "Напоминание",
         repeat_interval_minutes=payload.repeat_interval_minutes,
         max_attempts_per_day=payload.max_attempts_per_day,
+        day_of_month=payload.day_of_month,
     )
     await session.commit()
     return {
@@ -269,6 +273,7 @@ async def api_reminders_create(
         "description": reminder.description,
         "repeat_interval_minutes": reminder.repeat_interval_minutes,
         "max_attempts_per_day": reminder.max_attempts_per_day,
+        "day_of_month": reminder.day_of_month,
         "enabled": reminder.enabled,
     }
 
@@ -289,15 +294,24 @@ async def api_reminders_update(
         await toggle_custom_reminder(session, reminder_id, user.id, payload.enabled)
     # Редактирование полей
     time_of_day = _parse_hhmm(payload.time_of_day) if payload.time_of_day else None
-    await update_custom_reminder(
-        session,
-        reminder_id,
-        user.id,
-        time_of_day=time_of_day,
-        description=payload.description,
-        repeat_interval_minutes=payload.repeat_interval_minutes,
-        max_attempts_per_day=payload.max_attempts_per_day,
-    )
+    
+    update_kwargs = {}
+    if time_of_day is not None:
+        update_kwargs["time_of_day"] = time_of_day
+        
+    payload_dict = payload.model_dump(exclude_unset=True)
+    if "description" in payload_dict:
+        update_kwargs["description"] = payload_dict["description"]
+    if "repeat_interval_minutes" in payload_dict:
+        update_kwargs["repeat_interval_minutes"] = payload_dict["repeat_interval_minutes"]
+    if "max_attempts_per_day" in payload_dict:
+        update_kwargs["max_attempts_per_day"] = payload_dict["max_attempts_per_day"]
+    if "day_of_month" in payload_dict:
+        update_kwargs["day_of_month"] = payload_dict["day_of_month"]
+        
+    if update_kwargs:
+        await update_custom_reminder(session, reminder_id, user.id, **update_kwargs)
+        
     await session.commit()
     return {"ok": True}
 

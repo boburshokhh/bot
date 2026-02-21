@@ -40,7 +40,7 @@ from src.bot.keyboards import (
 )
 from src.bot.text import COMMANDS_OVERVIEW, TIMEZONE_CHOOSE_PROMPT
 from src.bot.states import MenuStates, SettingsStates
-from src.bot.user_flow import get_user_or_ask_timezone
+from src.bot.user_flow import get_user_or_run_onboarding
 from src.db.models import NotificationLog
 from src.services.notifications import TYPE_EVENING, TYPE_MORNING, STATUS_SENT
 from src.services.user import (
@@ -179,7 +179,7 @@ async def menu_settings_intervals(message: Message, state: FSMContext):
 @router.message(MenuStates.settings, F.text == BTN_RESET_NOTIFICATIONS)
 async def action_reset_notifications(message: Message, session: AsyncSession):
     """Сбросить записи «уже отправлено» за сегодня. Время уведомлений не меняется, повторная отправка — по расписанию."""
-    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
+    user = await get_user_or_run_onboarding(session, message.from_user.id, message, state)
     if not user:
         return
     try:
@@ -252,9 +252,8 @@ async def receive_morning_time(message: Message, session: AsyncSession, state: F
     if not t:
         await message.answer("Неверный формат. Введите HH:MM (например 07:30).")
         return
-    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
+    user = await get_user_or_run_onboarding(session, message.from_user.id, message, state)
     if not user:
-        await state.clear()
         return
     await update_notify_times(session, user.id, notify_morning_time=t)
     await state.clear()
@@ -271,9 +270,8 @@ async def receive_evening_time(message: Message, session: AsyncSession, state: F
     if not t:
         await message.answer("Неверный формат. Введите HH:MM (например 21:30).")
         return
-    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
+    user = await get_user_or_run_onboarding(session, message.from_user.id, message, state)
     if not user:
-        await state.clear()
         return
     await update_notify_times(session, user.id, notify_evening_time=t)
     await state.clear()
@@ -294,9 +292,8 @@ async def receive_interval_minutes(message: Message, session: AsyncSession, stat
     if not (5 <= minutes <= 720):
         await message.answer("Интервал должен быть в диапазоне 5-720 минут.")
         return
-    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
+    user = await get_user_or_run_onboarding(session, message.from_user.id, message, state)
     if not user:
-        await state.clear()
         return
     await update_morning_reminder_settings(session, user.id, interval_minutes=minutes)
     await state.clear()
@@ -317,9 +314,8 @@ async def receive_max_attempts(message: Message, session: AsyncSession, state: F
     if not (0 <= attempts <= 10):
         await message.answer("Количество повторов должно быть в диапазоне 0-10.")
         return
-    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
+    user = await get_user_or_run_onboarding(session, message.from_user.id, message, state)
     if not user:
-        await state.clear()
         return
     await update_morning_reminder_settings(session, user.id, max_attempts=attempts)
     await state.clear()

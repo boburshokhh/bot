@@ -48,6 +48,27 @@ def tz_keyboard(include_detect: bool = False) -> ReplyKeyboardMarkup:
     return kb
 
 
+def reminder_type_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="Ежедневно")],
+            [KeyboardButton(text="Раз в месяц")],
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
+
+
+def onboarding_time_keyboard(default_time: str) -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=f"Оставить {default_time}")],
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
+
+
 def morning_reply_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[

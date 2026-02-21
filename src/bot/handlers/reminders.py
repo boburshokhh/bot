@@ -7,7 +7,7 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.bot.states import ReminderStates
-from src.bot.user_flow import get_user_or_ask_timezone
+from src.bot.user_flow import get_user_or_run_onboarding
 from src.services.reminders import (
     add_custom_reminder,
     list_custom_reminders,
@@ -15,7 +15,8 @@ from src.services.reminders import (
     delete_custom_reminder,
     mark_reminder_done_today,
 )
-from src.bot.keyboards import custom_reminder_inline_keyboard, custom_reminder_off_keyboard
+from src.bot.keyboards import custom_reminder_inline_keyboard, custom_reminder_off_keyboard, reminder_type_keyboard
+from aiogram.types import ReplyKeyboardRemove
 
 router = Router()
 
@@ -30,8 +31,8 @@ def _parse_hhmm(value: str) -> time | None:
     return time(h, m)
 
 @router.message(Command("reminders"))
-async def cmd_reminders(message: Message, session: AsyncSession):
-    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
+async def cmd_reminders(message: Message, session: AsyncSession, state: FSMContext):
+    user = await get_user_or_run_onboarding(session, message.from_user.id, message, state)
     if not user:
         return
         
@@ -42,7 +43,8 @@ async def cmd_reminders(message: Message, session: AsyncSession):
         
     await message.answer("Ваши напоминания:")
     for r in reminders:
-        text = f"⏰ {r.time_of_day.strftime('%H:%M')} | {r.description}\n"
+        day_info = f"Каждое {r.day_of_month} число" if r.day_of_month else "Ежедневно"
+        text = f"⏰ {r.time_of_day.strftime('%H:%M')} ({day_info}) | {r.description}\n"
         text += f"Повтор: каждые {r.repeat_interval_minutes} мин, до {r.max_attempts_per_day} раз"
         if not r.enabled:
             text += "\n(Отключено 🔕)"
@@ -54,12 +56,36 @@ async def cmd_reminders(message: Message, session: AsyncSession):
 
 @router.message(Command("reminder_add"))
 async def cmd_reminder_add(message: Message, session: AsyncSession, state: FSMContext):
-    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
+    user = await get_user_or_run_onboarding(session, message.from_user.id, message, state)
     if not user:
         return
         
+    await state.set_state(ReminderStates.awaiting_type)
+    await message.answer("Как часто напоминать?", reply_markup=reminder_type_keyboard())
+
+@router.message(ReminderStates.awaiting_type, F.text, ~F.text.startswith("/"))
+async def process_reminder_type(message: Message, state: FSMContext):
+    text = (message.text or "").strip()
+    if text == "Ежедневно":
+        await state.update_data(reminder_day_of_month=None)
+        await state.set_state(ReminderStates.awaiting_time)
+        await message.answer("Во сколько напоминать каждый день? (в формате HH:MM, например 14:30)", reply_markup=ReplyKeyboardRemove())
+    elif text == "Раз в месяц":
+        await state.set_state(ReminderStates.awaiting_day_of_month)
+        await message.answer("В какое число месяца напоминать? (введите число от 1 до 31)", reply_markup=ReplyKeyboardRemove())
+    else:
+        await message.answer("Пожалуйста, выберите вариант из меню: «Ежедневно» или «Раз в месяц».", reply_markup=reminder_type_keyboard())
+
+@router.message(ReminderStates.awaiting_day_of_month, F.text, ~F.text.startswith("/"))
+async def process_reminder_day_of_month(message: Message, state: FSMContext):
+    val = (message.text or "").strip()
+    if not val.isdigit() or not (1 <= int(val) <= 31):
+        await message.answer("Введите корректное число от 1 до 31.")
+        return
+        
+    await state.update_data(reminder_day_of_month=int(val))
     await state.set_state(ReminderStates.awaiting_time)
-    await message.answer("Во сколько напоминать каждый день? (в формате HH:MM, например 14:30)")
+    await message.answer(f"Во сколько напоминать {val}-го числа? (в формате HH:MM, например 14:30)")
 
 @router.message(ReminderStates.awaiting_time, F.text, ~F.text.startswith("/"))
 async def process_reminder_time(message: Message, state: FSMContext):
@@ -101,9 +127,8 @@ async def process_reminder_max_attempts(message: Message, session: AsyncSession,
         await message.answer("Введите число попыток от 1 до 50.")
         return
         
-    user = await get_user_or_ask_timezone(session, message.from_user.id, message)
+    user = await get_user_or_run_onboarding(session, message.from_user.id, message, state)
     if not user:
-        await state.clear()
         return
         
     data = await state.get_data()
@@ -115,16 +140,18 @@ async def process_reminder_max_attempts(message: Message, session: AsyncSession,
         time_of_day=t,
         description=data["reminder_desc"],
         repeat_interval_minutes=data["reminder_interval"],
-        max_attempts_per_day=int(val)
+        max_attempts_per_day=int(val),
+        day_of_month=data.get("reminder_day_of_month")
     )
     
     await state.clear()
-    await message.answer(f"Напоминание сохранено! Оно сработает в {data['reminder_time']}.")
+    day_str = f"{data['reminder_day_of_month']}-го числа каждого месяца" if data.get("reminder_day_of_month") else "каждый день"
+    await message.answer(f"Напоминание сохранено! Оно сработает {day_str} в {data['reminder_time']}.")
 
 @router.callback_query(F.data.startswith("crem_done_"))
-async def callback_crem_done(callback: CallbackQuery, session: AsyncSession):
+async def callback_crem_done(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     rem_id = int(callback.data.split("_")[-1])
-    user = await get_user_or_ask_timezone(session, callback.from_user.id, callback.message)
+    user = await get_user_or_run_onboarding(session, callback.from_user.id, callback.message, state)
     if not user:
         await callback.answer("Ошибка пользователя")
         return
@@ -139,9 +166,9 @@ async def callback_crem_done(callback: CallbackQuery, session: AsyncSession):
         await callback.answer("Напоминание не найдено или нет прав")
 
 @router.callback_query(F.data.startswith("crem_off_"))
-async def callback_crem_off(callback: CallbackQuery, session: AsyncSession):
+async def callback_crem_off(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     rem_id = int(callback.data.split("_")[-1])
-    user = await get_user_or_ask_timezone(session, callback.from_user.id, callback.message)
+    user = await get_user_or_run_onboarding(session, callback.from_user.id, callback.message, state)
     if not user:
         return
         
@@ -154,9 +181,9 @@ async def callback_crem_off(callback: CallbackQuery, session: AsyncSession):
         await callback.answer("Напоминание не найдено")
 
 @router.callback_query(F.data.startswith("crem_on_"))
-async def callback_crem_on(callback: CallbackQuery, session: AsyncSession):
+async def callback_crem_on(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     rem_id = int(callback.data.split("_")[-1])
-    user = await get_user_or_ask_timezone(session, callback.from_user.id, callback.message)
+    user = await get_user_or_run_onboarding(session, callback.from_user.id, callback.message, state)
     if not user:
         return
         
@@ -169,9 +196,9 @@ async def callback_crem_on(callback: CallbackQuery, session: AsyncSession):
         await callback.answer("Напоминание не найдено")
 
 @router.callback_query(F.data.startswith("crem_del_"))
-async def callback_crem_del(callback: CallbackQuery, session: AsyncSession):
+async def callback_crem_del(callback: CallbackQuery, session: AsyncSession, state: FSMContext):
     rem_id = int(callback.data.split("_")[-1])
-    user = await get_user_or_ask_timezone(session, callback.from_user.id, callback.message)
+    user = await get_user_or_run_onboarding(session, callback.from_user.id, callback.message, state)
     if not user:
         return
         
