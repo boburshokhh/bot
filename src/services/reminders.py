@@ -3,7 +3,7 @@ import logging
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -80,6 +80,42 @@ async def list_custom_reminders(session: AsyncSession, user_id: int) -> list[Cus
         .order_by(CustomReminder.time_of_day)
     )
     return list(r.scalars().all())
+
+
+async def get_reminder_stats(session: AsyncSession, user_id: int) -> dict:
+    """Агрегированная статистика по напоминаниям пользователя."""
+    q = select(CustomReminder).where(CustomReminder.user_id == user_id)
+    r_total = await session.execute(select(func.count()).select_from(q.subquery()))
+    total = r_total.scalar() or 0
+
+    r_enabled = await session.execute(
+        select(func.count())
+        .select_from(CustomReminder)
+        .where(CustomReminder.user_id == user_id, CustomReminder.enabled == True)
+    )
+    enabled = r_enabled.scalar() or 0
+
+    r_done = await session.execute(
+        select(func.count())
+        .select_from(CustomReminder)
+        .where(CustomReminder.user_id == user_id, CustomReminder.done_today == True)
+    )
+    done_today = r_done.scalar() or 0
+
+    r_sent = await session.execute(
+        select(func.coalesce(func.sum(CustomReminder.attempts_sent_today), 0)).where(
+            CustomReminder.user_id == user_id
+        )
+    )
+    sent_today = int(r_sent.scalar() or 0)
+
+    return {
+        "total": total,
+        "enabled": enabled,
+        "disabled": total - enabled,
+        "done_today": done_today,
+        "sent_today": sent_today,
+    }
 
 
 async def get_custom_reminder(session: AsyncSession, reminder_id: int) -> CustomReminder | None:

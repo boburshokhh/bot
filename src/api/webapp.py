@@ -20,6 +20,7 @@ from src.services.reminders import (
     add_custom_reminder,
     list_custom_reminders,
     get_custom_reminder,
+    get_reminder_stats,
     delete_custom_reminder,
     toggle_custom_reminder,
     mark_reminder_done_today,
@@ -210,6 +211,14 @@ async def api_timezone_detect(
         raise HTTPException(status_code=400, detail="Invalid timezone") from exc
     await update_user_timezone(session, user.id, payload.timezone)
     return {"ok": True, "timezone": payload.timezone}
+
+
+@router.get("/reminders/stats")
+async def api_reminders_stats(
+    user: User = Depends(get_webapp_user),
+    session: AsyncSession = Depends(get_async_session),
+):
+    return await get_reminder_stats(session, user.id)
 
 
 @router.get("/reminders")

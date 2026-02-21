@@ -12,6 +12,29 @@
     </div>
 
     <template v-else>
+      <el-row v-if="stats.total >= 0" :gutter="12" class="stats-row">
+        <el-col :xs="12" :sm="6">
+          <div class="stat-item">
+            <el-statistic :value="stats.total" title="Всего" />
+          </div>
+        </el-col>
+        <el-col :xs="12" :sm="6">
+          <div class="stat-item stat-enabled">
+            <el-statistic :value="stats.enabled" title="Активных" />
+          </div>
+        </el-col>
+        <el-col :xs="12" :sm="6">
+          <div class="stat-item stat-done">
+            <el-statistic :value="stats.done_today" title="Выполнено сегодня" />
+          </div>
+        </el-col>
+        <el-col :xs="12" :sm="6">
+          <div class="stat-item stat-sent">
+            <el-statistic :value="stats.sent_today" title="Отправлено сегодня" />
+          </div>
+        </el-col>
+      </el-row>
+
       <el-empty
         v-if="!reminders.length"
         description="Нет напоминаний"
@@ -171,6 +194,13 @@ const emit = defineEmits(['refresh'])
 
 const { api } = useApi()
 const reminders = ref([])
+const stats = ref({
+  total: -1,
+  enabled: 0,
+  disabled: 0,
+  done_today: 0,
+  sent_today: 0,
+})
 const loading = ref(true)
 const saving = ref(false)
 const deleting = ref(false)
@@ -191,8 +221,12 @@ function validateTime(s) {
 async function loadReminders() {
   loading.value = true
   try {
-    const data = await api.get('/api/reminders')
-    reminders.value = data
+    const [listData, statsData] = await Promise.all([
+      api.get('/api/reminders'),
+      api.get('/api/reminders/stats'),
+    ])
+    reminders.value = listData
+    stats.value = { ...stats.value, ...statsData }
   } catch (err) {
     ElMessage.error('Ошибка загрузки: ' + err.message)
   } finally {
@@ -369,6 +403,29 @@ defineExpose({ loadReminders })
   font-size: 14px;
 }
 
+.stats-row {
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.stat-item {
+  padding: 12px 8px;
+  background: var(--el-fill-color-light);
+  border-radius: 12px;
+}
+
+.stat-enabled {
+  background: var(--el-color-primary-light-9);
+}
+
+.stat-done {
+  background: var(--el-color-success-light-9);
+}
+
+.stat-sent {
+  background: var(--el-color-info-light-9);
+}
+
 @media (max-width: 768px) {
   .reminder-item {
     flex-direction: column;
@@ -377,6 +434,10 @@ defineExpose({ loadReminders })
 
   .reminder-actions {
     justify-content: flex-end;
+  }
+
+  .stats-row .el-col {
+    margin-bottom: 8px;
   }
 }
 </style>
