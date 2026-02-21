@@ -16,6 +16,14 @@ from src.db.models import Plan, Task, User
 from src.db.session import get_async_session
 from src.services.evening import DONE, FAILED, PARTIAL, set_task_status, update_task_comment
 from src.services.plan import save_plan
+from src.services.reminders import (
+    add_custom_reminder,
+    list_custom_reminders,
+    get_custom_reminder,
+    delete_custom_reminder,
+    toggle_custom_reminder,
+    mark_reminder_done_today,
+)
 from src.services.stats import get_history, get_stats, get_today_plan
 from src.services.user import (
     update_morning_reminder_settings,
@@ -46,6 +54,18 @@ class CreateTodayPlanPayload(BaseModel):
 
 class TimezoneDetectPayload(BaseModel):
     timezone: str
+
+
+class CreateReminderPayload(BaseModel):
+    time_of_day: str  # HH:MM
+    description: str
+    repeat_interval_minutes: int = Field(ge=1, le=1440, default=30)
+    max_attempts_per_day: int = Field(ge=1, le=50, default=3)
+
+
+class ReminderUpdatePayload(BaseModel):
+    enabled: bool | None = None
+    mark_done_today: bool | None = None
 
 
 def _parse_hhmm(value: str) -> time:
@@ -190,6 +210,84 @@ async def api_timezone_detect(
         raise HTTPException(status_code=400, detail="Invalid timezone") from exc
     await update_user_timezone(session, user.id, payload.timezone)
     return {"ok": True, "timezone": payload.timezone}
+
+
+@router.get("/reminders")
+async def api_reminders_list(
+    user: User = Depends(get_webapp_user),
+    session: AsyncSession = Depends(get_async_session),
+):
+    reminders = await list_custom_reminders(session, user.id)
+    return [
+        {
+            "id": r.id,
+            "time_of_day": r.time_of_day.strftime("%H:%M"),
+            "description": r.description,
+            "repeat_interval_minutes": r.repeat_interval_minutes,
+            "max_attempts_per_day": r.max_attempts_per_day,
+            "enabled": r.enabled,
+            "done_today": r.done_today,
+            "attempts_sent_today": r.attempts_sent_today,
+        }
+        for r in reminders
+    ]
+
+
+@router.post("/reminders")
+async def api_reminders_create(
+    payload: CreateReminderPayload,
+    user: User = Depends(get_webapp_user),
+    session: AsyncSession = Depends(get_async_session),
+):
+    t = _parse_hhmm(payload.time_of_day)
+    reminder = await add_custom_reminder(
+        session,
+        user.id,
+        time_of_day=t,
+        description=payload.description.strip()[:500] or "Напоминание",
+        repeat_interval_minutes=payload.repeat_interval_minutes,
+        max_attempts_per_day=payload.max_attempts_per_day,
+    )
+    await session.commit()
+    return {
+        "id": reminder.id,
+        "time_of_day": reminder.time_of_day.strftime("%H:%M"),
+        "description": reminder.description,
+        "repeat_interval_minutes": reminder.repeat_interval_minutes,
+        "max_attempts_per_day": reminder.max_attempts_per_day,
+        "enabled": reminder.enabled,
+    }
+
+
+@router.put("/reminders/{reminder_id}")
+async def api_reminders_update(
+    reminder_id: int,
+    payload: ReminderUpdatePayload,
+    user: User = Depends(get_webapp_user),
+    session: AsyncSession = Depends(get_async_session),
+):
+    reminder = await get_custom_reminder(session, reminder_id)
+    if not reminder or reminder.user_id != user.id:
+        raise HTTPException(status_code=404, detail="Reminder not found")
+    if payload.mark_done_today:
+        await mark_reminder_done_today(session, reminder_id, user.id)
+    if payload.enabled is not None:
+        await toggle_custom_reminder(session, reminder_id, user.id, payload.enabled)
+    await session.commit()
+    return {"ok": True}
+
+
+@router.delete("/reminders/{reminder_id}")
+async def api_reminders_delete(
+    reminder_id: int,
+    user: User = Depends(get_webapp_user),
+    session: AsyncSession = Depends(get_async_session),
+):
+    deleted = await delete_custom_reminder(session, reminder_id, user.id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Reminder not found")
+    await session.commit()
+    return {"ok": True}
 
 
 @router.get("/history")

@@ -1,0 +1,382 @@
+<template>
+  <el-card class="section-card">
+    <template #header>
+      <div class="card-header">
+        <el-icon class="card-header-icon"><Bell /></el-icon>
+        <span>Напоминания</span>
+      </div>
+    </template>
+
+    <div v-if="loading" class="loading-container">
+      <el-skeleton :rows="4" animated />
+    </div>
+
+    <template v-else>
+      <el-empty
+        v-if="!reminders.length"
+        description="Нет напоминаний"
+        :image-size="80"
+      >
+        <template #image>
+          <el-icon class="empty-icon"><BellFilled /></el-icon>
+        </template>
+      </el-empty>
+
+      <div v-else class="reminders-list">
+        <div
+          v-for="r in reminders"
+          :key="r.id"
+          class="reminder-item"
+          :class="{ disabled: !r.enabled }"
+        >
+          <div class="reminder-main">
+            <span class="reminder-time">{{ r.time_of_day }}</span>
+            <span class="reminder-desc">{{ r.description }}</span>
+            <el-text type="info" size="small" class="reminder-meta">
+              Повтор: каждые {{ r.repeat_interval_minutes }} мин, до {{ r.max_attempts_per_day }} раз в день
+            </el-text>
+            <el-tag v-if="r.done_today" type="success" size="small">Выполнено сегодня</el-tag>
+            <el-tag v-else-if="!r.enabled" type="info" size="small">Отключено</el-tag>
+          </div>
+          <div class="reminder-actions">
+            <el-button
+              v-if="r.enabled && !r.done_today"
+              type="success"
+              size="small"
+              circle
+              title="Выполнено сегодня"
+              @click="markDone(r.id)"
+            >
+              <el-icon><Check /></el-icon>
+            </el-button>
+            <el-button
+              :type="r.enabled ? 'warning' : 'primary'"
+              size="small"
+              circle
+              :title="r.enabled ? 'Отключить' : 'Включить'"
+              @click="toggle(r.id, !r.enabled)"
+            >
+              <el-icon><component :is="r.enabled ? 'CircleClose' : 'Bell'" /></el-icon>
+            </el-button>
+            <el-button
+              type="danger"
+              size="small"
+              circle
+              title="Удалить"
+              @click="confirmDelete(r)"
+            >
+              <el-icon><Delete /></el-icon>
+            </el-button>
+          </div>
+        </div>
+      </div>
+
+      <el-divider />
+
+      <div class="add-section">
+        <el-text tag="b" class="add-title">Добавить напоминание</el-text>
+        <el-form
+          :model="form"
+          label-position="top"
+          @submit.prevent="addReminder"
+        >
+          <el-row :gutter="12">
+            <el-col :span="8">
+              <el-form-item label="Время (HH:MM)">
+                <el-input
+                  v-model="form.time_of_day"
+                  placeholder="14:30"
+                  maxlength="5"
+                />
+              </el-form-item>
+            </el-col>
+            <el-col :span="16">
+              <el-form-item label="Описание">
+                <el-input
+                  v-model="form.description"
+                  placeholder="Например: Выпить таблетку"
+                  clearable
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-row :gutter="12">
+            <el-col :span="12">
+              <el-form-item label="Повторять каждые (мин)">
+                <el-input-number
+                  v-model="form.repeat_interval_minutes"
+                  :min="1"
+                  :max="1440"
+                  controls-position="right"
+                  style="width: 100%;"
+                />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="Макс. раз в день">
+                <el-input-number
+                  v-model="form.max_attempts_per_day"
+                  :min="1"
+                  :max="50"
+                  controls-position="right"
+                  style="width: 100%;"
+                />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-button
+            type="primary"
+            native-type="submit"
+            :loading="saving"
+            style="width: 100%;"
+          >
+            <el-icon><Plus /></el-icon>
+            <span>Добавить</span>
+          </el-button>
+        </el-form>
+      </div>
+    </template>
+
+    <el-dialog
+      v-model="deleteDialogVisible"
+      title="Удалить напоминание?"
+      width="90%"
+      :close-on-click-modal="true"
+    >
+      <span>Напоминание «{{ reminderToDelete?.description }}» будет удалено.</span>
+      <template #footer>
+        <el-button @click="deleteDialogVisible = false">Отмена</el-button>
+        <el-button type="danger" :loading="deleting" @click="doDelete">
+          Удалить
+        </el-button>
+      </template>
+    </el-dialog>
+  </el-card>
+</template>
+
+<script setup>
+import { ref, reactive, onMounted } from 'vue'
+import { ElMessage } from 'element-plus'
+import {
+  Bell,
+  BellFilled,
+  Check,
+  Delete,
+  Plus,
+  CircleClose,
+} from '@element-plus/icons-vue'
+import { useApi } from '@/composables/useApi'
+
+const emit = defineEmits(['refresh'])
+
+const { api } = useApi()
+const reminders = ref([])
+const loading = ref(true)
+const saving = ref(false)
+const deleting = ref(false)
+const deleteDialogVisible = ref(false)
+const reminderToDelete = ref(null)
+
+const form = reactive({
+  time_of_day: '09:00',
+  description: '',
+  repeat_interval_minutes: 30,
+  max_attempts_per_day: 3,
+})
+
+function validateTime(s) {
+  return /^\d{2}:\d{2}$/.test(s) && parseInt(s.slice(0, 2), 10) <= 23 && parseInt(s.slice(3, 5), 10) <= 59
+}
+
+async function loadReminders() {
+  loading.value = true
+  try {
+    const data = await api.get('/api/reminders')
+    reminders.value = data
+  } catch (err) {
+    ElMessage.error('Ошибка загрузки: ' + err.message)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function addReminder() {
+  const desc = form.description?.trim()
+  if (!desc) {
+    ElMessage.warning('Введите описание')
+    return
+  }
+  if (!validateTime(form.time_of_day)) {
+    ElMessage.warning('Время в формате HH:MM (например 14:30)')
+    return
+  }
+  saving.value = true
+  try {
+    await api.post('/api/reminders', {
+      time_of_day: form.time_of_day,
+      description: desc,
+      repeat_interval_minutes: form.repeat_interval_minutes,
+      max_attempts_per_day: form.max_attempts_per_day,
+    })
+    ElMessage.success('Напоминание добавлено')
+    form.description = ''
+    await loadReminders()
+    emit('refresh')
+  } catch (err) {
+    ElMessage.error('Ошибка: ' + err.message)
+  } finally {
+    saving.value = false
+  }
+}
+
+async function toggle(id, enabled) {
+  try {
+    await api.put(`/api/reminders/${id}`, { enabled })
+    ElMessage.success(enabled ? 'Напоминание включено' : 'Напоминание отключено')
+    await loadReminders()
+    emit('refresh')
+  } catch (err) {
+    ElMessage.error('Ошибка: ' + err.message)
+  }
+}
+
+async function markDone(id) {
+  try {
+    await api.put(`/api/reminders/${id}`, { mark_done_today: true })
+    ElMessage.success('Отмечено как выполненное на сегодня')
+    await loadReminders()
+    emit('refresh')
+  } catch (err) {
+    ElMessage.error('Ошибка: ' + err.message)
+  }
+}
+
+function confirmDelete(r) {
+  reminderToDelete.value = r
+  deleteDialogVisible.value = true
+}
+
+async function doDelete() {
+  if (!reminderToDelete.value) return
+  deleting.value = true
+  try {
+    await api.delete(`/api/reminders/${reminderToDelete.value.id}`)
+    ElMessage.success('Напоминание удалено')
+    deleteDialogVisible.value = false
+    reminderToDelete.value = null
+    await loadReminders()
+    emit('refresh')
+  } catch (err) {
+    ElMessage.error('Ошибка: ' + err.message)
+  } finally {
+    deleting.value = false
+  }
+}
+
+onMounted(() => {
+  loadReminders()
+})
+
+defineExpose({ loadReminders })
+</script>
+
+<style scoped>
+.section-card {
+  margin-bottom: 16px;
+  border-radius: 16px;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.card-header-icon {
+  font-size: 20px;
+  color: var(--el-color-primary);
+}
+
+.loading-container {
+  padding: 8px 0;
+}
+
+.empty-icon {
+  font-size: 48px;
+  color: var(--el-text-color-placeholder);
+}
+
+.reminders-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.reminder-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--el-fill-color-light);
+}
+
+.reminder-item.disabled {
+  opacity: 0.7;
+}
+
+.reminder-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.reminder-time {
+  font-weight: 600;
+  font-size: 16px;
+  margin-right: 8px;
+  color: var(--el-text-color-primary);
+}
+
+.reminder-desc {
+  color: var(--el-text-color-regular);
+}
+
+.reminder-meta {
+  display: block;
+  margin-top: 4px;
+}
+
+.reminder-main .el-tag {
+  margin-top: 6px;
+}
+
+.reminder-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.add-section {
+  margin-top: 8px;
+}
+
+.add-title {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .reminder-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .reminder-actions {
+    justify-content: flex-end;
+  }
+}
+</style>

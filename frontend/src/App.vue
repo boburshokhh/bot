@@ -28,6 +28,16 @@
             <CreatePlan @saved="handlePlanSaved" />
           </el-tab-pane>
 
+          <el-tab-pane label="Напоминания" name="reminders">
+            <template #label>
+              <span class="tab-label">
+                <el-icon><Bell /></el-icon>
+                <span>Напоминания</span>
+              </span>
+            </template>
+            <Reminders @refresh="() => {}" />
+          </el-tab-pane>
+
           <el-tab-pane label="Статистика" name="stats">
             <template #label>
               <span class="tab-label">
@@ -61,7 +71,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Calendar, Document, DataAnalysis, Setting } from '@element-plus/icons-vue'
+import { Calendar, Document, DataAnalysis, Setting, Bell } from '@element-plus/icons-vue'
 import ru from 'element-plus/es/locale/lang/ru'
 import { useTelegramTheme } from '@/composables/useTelegramTheme'
 import { useWebApp } from '@/composables/useWebApp'
@@ -71,6 +81,7 @@ import CreatePlan from '@/components/CreatePlan.vue'
 import Settings from '@/components/Settings.vue'
 import Stats from '@/components/Stats.vue'
 import History from '@/components/History.vue'
+import Reminders from '@/components/Reminders.vue'
 
 const ruLocale = ru
 
